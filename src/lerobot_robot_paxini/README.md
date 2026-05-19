@@ -62,7 +62,10 @@ repo 루트에서 실행합니다.
 cd /mnt/c/Users/dlehg/conference/vtla
 conda activate lerobot
 export PYTHONPATH=/mnt/c/Users/dlehg/conference/vtla/lerobot/src:$PYTHONPATH
+pip install "paxini-utils @ git+https://github.com/riverfog7/paxini-utils.git"
 ```
+
+`paxini-utils`는 Paxini high-speed board의 register command, connected sensor 확인, point count, distribution force 파싱을 담당합니다. LeRobot 쪽에서는 `read_connected_distribution_forces()`를 호출해서 연결된 센서의 촉각 데이터를 요청하고, serial frame은 직접 파싱하지 않습니다.
 
 WSL에서 USB serial을 쓸 때는 Windows COM 포트를 WSL로 attach해야 합니다. Windows에서 PXSR 프로그램이 COM 포트를 잡고 있으면 WSL에서는 동시에 읽을 수 없습니다. 실제 센서를 쓸 때는 PXSR 프로그램을 종료하고 `/dev/ttyACM*` 포트를 확인합니다.
 
@@ -200,8 +203,8 @@ lerobot-teleoperate \
   --fps=30
 ```
 
-실제 serial 센서는 기본적으로 background thread에서 계속 읽습니다.
-record loop는 최신 sample만 가져가므로 촉각 frame 대기 때문에 전체 FPS가 흔들리는 일을 줄입니다.
+실제 serial 센서는 기본적으로 background thread에서 `read_connected_distribution_forces()`를 반복 호출해 계속 읽습니다.
+record loop는 최신 sample만 가져가므로 촉각 register 요청 대기 때문에 전체 FPS가 흔들리는 일을 줄입니다.
 문제 추적을 위해 동기식으로 되돌리고 싶을 때만 아래 옵션을 추가합니다.
 
 ```bash

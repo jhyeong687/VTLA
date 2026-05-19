@@ -6,7 +6,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 
@@ -14,43 +14,7 @@ from lerobot.utils.import_utils import require_package
 
 from .types import PaxiniSample
 
-REQ_HEAD = b"\x55\xAA"
-RESP_HEAD_AUTO_RETURN = b"\xAA\x56"
-RESERVED = b"\x00"
-
-FUNC_WRITE = 0x10
-AUTO_RETURN_REG = 0x0017
-
-MAX_FRAME_BYTES = 8192
-
 TaxelValueMode = Literal["x", "y", "z", "magnitude"]
-
-
-class PaxiniProtocolError(RuntimeError):
-    pass
-
-
-def lrc_cal(data: bytes | bytearray | memoryview) -> int:
-    """Calculate the two's-complement LRC used by the GEN3 serial protocol."""
-    return (-sum(data)) & 0xFF
-
-
-def build_gen3_request_frame(
-    *,
-    func_code: int,
-    reg_addr: int,
-    data_len: int,
-    payload: bytes = b"",
-) -> bytes:
-    frame = bytearray()
-    frame += REQ_HEAD
-    frame += RESERVED
-    frame.append(func_code & 0xFF)
-    frame += int(reg_addr).to_bytes(2, "little", signed=False)
-    frame += int(data_len).to_bytes(2, "little", signed=False)
-    frame += payload
-    frame.append(lrc_cal(frame))
-    return bytes(frame)
 
 
 class PaxiniReader:
@@ -239,14 +203,7 @@ class CsvPaxiniReader(PaxiniReader):
 
 
 class SerialPaxiniReader(PaxiniReader):
-    """Read PXSR GEN3 auto-return tactile frames from a serial port.
-
-    The verified adapter protocol is:
-    - host request header: 55 AA
-    - enable auto-return: write 0x01 to register 0x0017
-    - stream response header: AA 56
-    - valid data is emitted as 3-byte force groups, usually X/Y/Z.
-    """
+    """Read connected Paxini distribution-force registers through paxini-utils."""
 
     def __init__(
         self,
@@ -279,48 +236,38 @@ class SerialPaxiniReader(PaxiniReader):
         self.skip_bytes = skip_bytes
         self.async_read = async_read
         self.connected = False
-        self._serial = None
+        self._board: Any | None = None
+        self._read_thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
         self._last_sample: PaxiniSample | None = None
         self._last_error: Exception | None = None
         self._sample_lock = threading.Lock()
-        self._stop_event = threading.Event()
-        self._read_thread: threading.Thread | None = None
 
     def connect(self) -> None:
-        require_package("pyserial", extra="pyserial-dep", import_name="serial")
-        import serial
+        require_package("paxini-utils", extra="paxini", import_name="paxini_utils")
+        from paxini_utils.high_speed_board import HighSpeedBoard
 
-        self._serial = serial.Serial(
-            port=self.port,
-            baudrate=self.baudrate,
-            bytesize=serial.EIGHTBITS,
-            parity=serial.PARITY_NONE,
-            stopbits=serial.STOPBITS_ONE,
-            timeout=min(self.timeout_s, 0.05),
-            write_timeout=self.timeout_s,
-            inter_byte_timeout=0.001,
-        )
-        self._serial.reset_input_buffer()
-        self._serial.reset_output_buffer()
+        self._board = HighSpeedBoard(self.port, baudrate=self.baudrate, timeout=self.timeout_s)
+        self._board.open()
         with self._sample_lock:
             self._last_sample = None
             self._last_error = None
-        self._set_auto_return(False)
-        self._serial.reset_input_buffer()
-        self._set_auto_return(True)
+        self._board.disable_auto_push(timeout=0)
+        self._board.get_connected_sensors()
+        self._board.get_distribution_point_counts()
         self.connected = True
         if self.async_read:
             self._start_background_reader()
 
     def disconnect(self) -> None:
         self._stop_background_reader()
-        if self._serial is not None and self._serial.is_open:
+        if self._board is not None and self._board.is_open:
             try:
-                self._set_auto_return(False)
+                self._board.disable_auto_push(timeout=0)
                 time.sleep(0.05)
             finally:
-                self._serial.close()
-        self._serial = None
+                self._board.close()
+        self._board = None
         self.connected = False
 
     def read_latest(self) -> PaxiniSample:
@@ -333,16 +280,20 @@ class SerialPaxiniReader(PaxiniReader):
         return self._read_and_decode_once()
 
     def _read_and_decode_once(self) -> PaxiniSample:
+        if self._board is None:
+            raise RuntimeError("SerialPaxiniReader is not connected.")
         try:
-            frame = self._read_auto_return_frame()
-        except TimeoutError:
+            readings = self._board.read_connected_distribution_forces(
+                refresh_status=False,
+                refresh_point_counts=False,
+            )
+        except Exception:
             with self._sample_lock:
                 if self._last_sample is not None:
                     return self._last_sample
             raise
 
-        data = self._parse_auto_return_frame(frame)
-        sample = self._decode_taxels(data)
+        sample = self._readings_to_sample(readings)
         with self._sample_lock:
             self._last_sample = sample
             self._last_error = None
@@ -380,127 +331,40 @@ class SerialPaxiniReader(PaxiniReader):
     def _background_read_loop(self) -> None:
         while not self._stop_event.is_set():
             try:
-                frame = self._read_auto_return_frame()
-                data = self._parse_auto_return_frame(frame)
-                sample = self._decode_taxels(data)
+                sample = self._read_and_decode_once()
                 with self._sample_lock:
                     self._last_sample = sample
                     self._last_error = None
-            except TimeoutError:
-                continue
             except Exception as exc:
                 with self._sample_lock:
                     self._last_error = exc
-                if not self._stop_event.wait(0.01):
-                    continue
+                self._stop_event.wait(0.01)
 
-    def _set_auto_return(self, enabled: bool) -> None:
-        if self._serial is None or not self._serial.is_open:
-            return
+    def _readings_to_sample(self, readings: tuple[Any, ...]) -> PaxiniSample:
+        values: list[float] = []
+        for reading in readings:
+            for point in reading.distribution:
+                values.append(self._point_value(point.force))
 
-        payload = b"\x01" if enabled else b"\x00"
-        frame = build_gen3_request_frame(
-            func_code=FUNC_WRITE,
-            reg_addr=AUTO_RETURN_REG,
-            data_len=len(payload),
-            payload=payload,
-        )
-        self._serial.write(frame)
-        self._serial.flush()
-        time.sleep(0.05)
-
-    def _read_auto_return_frame(self) -> bytes:
-        if self._serial is None or not self._serial.is_open:
-            raise RuntimeError("SerialPaxiniReader is not connected.")
-
-        deadline = time.monotonic() + self.timeout_s
-        buffer = bytearray()
-
-        while time.monotonic() < deadline:
-            read_size = max(1, min(512, getattr(self._serial, "in_waiting", 0) or 1))
-            chunk = self._serial.read(read_size)
-            if not chunk:
-                continue
-
-            buffer.extend(chunk)
-            while True:
-                head_idx = buffer.find(RESP_HEAD_AUTO_RETURN)
-                if head_idx < 0:
-                    del buffer[:-1]
-                    break
-                if head_idx > 0:
-                    del buffer[:head_idx]
-
-                if len(buffer) < 6:
-                    break
-
-                valid_frame_len = int.from_bytes(buffer[3:5], "little", signed=False)
-                frame_len = valid_frame_len + 6
-                if frame_len < 7 or frame_len > MAX_FRAME_BYTES:
-                    del buffer[0]
-                    continue
-                if len(buffer) < frame_len:
-                    break
-
-                frame = bytes(buffer[:frame_len])
-                if lrc_cal(frame[:-1]) != frame[-1]:
-                    del buffer[0]
-                    continue
-
-                return frame
-
-        raise TimeoutError(f"Timed out waiting for PXSR auto-return data on {self.port}.")
-
-    @staticmethod
-    def _parse_auto_return_frame(frame: bytes) -> bytes:
-        if len(frame) < 7:
-            raise PaxiniProtocolError(f"Auto-return frame too short: {len(frame)} bytes.")
-        if frame[:2] != RESP_HEAD_AUTO_RETURN:
-            raise PaxiniProtocolError(f"Unexpected auto-return header: {frame[:2]!r}.")
-        if lrc_cal(frame[:-1]) != frame[-1]:
-            raise PaxiniProtocolError("Auto-return LRC check failed.")
-
-        valid_frame_len = int.from_bytes(frame[3:5], "little", signed=False)
-        valid_data_len = valid_frame_len - 1
-        error_code = frame[5]
-        if error_code != 0:
-            raise PaxiniProtocolError(f"PXSR auto-return error code: 0x{error_code:02X}.")
-
-        data_end = 6 + valid_data_len
-        if data_end > len(frame) - 1:
-            raise PaxiniProtocolError(
-                f"Incomplete auto-return data: expected {valid_data_len} bytes, "
-                f"got {max(len(frame) - 7, 0)} bytes."
-            )
-        return frame[6:data_end]
-
-    def _decode_taxels(self, payload: bytes) -> PaxiniSample:
-        if self.skip_bytes:
-            payload = payload[self.skip_bytes :]
-
-        group_count = len(payload) // 3
         taxels = np.zeros(self.num_taxels, dtype=np.float32)
-        if group_count == 0:
+        if self.skip_bytes:
+            skip_points = self.skip_bytes // 3
+            values = values[skip_points:]
+        if not values:
             return PaxiniSample(taxels=taxels, timestamp_s=time.time())
 
-        raw = np.frombuffer(payload[: group_count * 3], dtype=np.uint8).reshape(group_count, 3)
-        x = raw[:, 0].astype(np.int16)
-        y = raw[:, 1].astype(np.int16)
-        x = np.where(x <= 127, x, x - 256).astype(np.float32)
-        y = np.where(y <= 127, y, y - 256).astype(np.float32)
-        z = raw[:, 2].astype(np.float32)
-
-        if self.taxel_value_mode == "x":
-            values = np.abs(x)
-        elif self.taxel_value_mode == "y":
-            values = np.abs(y)
-        elif self.taxel_value_mode == "magnitude":
-            values = np.sqrt(x * x + y * y + z * z)
-        else:
-            values = z
-
-        values = values.astype(np.float32, copy=False) * self.taxel_scale
-        count = min(self.num_taxels, values.shape[0])
-        taxels[:count] = values[:count]
-
+        values_np = np.asarray(values, dtype=np.float32)
+        count = min(self.num_taxels, values_np.shape[0])
+        taxels[:count] = values_np[:count]
         return PaxiniSample(taxels=taxels, fz=float(taxels.max(initial=0.0)), timestamp_s=time.time())
+
+    def _point_value(self, force: Any) -> float:
+        if self.taxel_value_mode == "x":
+            value = abs(float(force.raw_x))
+        elif self.taxel_value_mode == "y":
+            value = abs(float(force.raw_y))
+        elif self.taxel_value_mode == "magnitude":
+            value = float(np.sqrt(force.raw_x * force.raw_x + force.raw_y * force.raw_y + force.raw_z * force.raw_z))
+        else:
+            value = float(force.raw_z)
+        return value * self.taxel_scale

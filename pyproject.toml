@@ -112,6 +112,9 @@ hardware = [
     "lerobot[pyserial-dep]",
     "lerobot[deepdiff-dep]",
 ]
+paxini = [
+    "paxini-utils @ git+https://github.com/riverfog7/paxini-utils.git",
+]
 viz = [
     "rerun-sdk>=0.24.0,<0.27.0",
 ]
