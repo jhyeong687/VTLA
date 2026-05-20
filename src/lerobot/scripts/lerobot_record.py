@@ -66,6 +66,7 @@ lerobot-record \\
 """
 
 import logging
+import os
 import time
 from dataclasses import asdict, dataclass
 from pprint import pformat
@@ -192,6 +193,8 @@ class RecordConfig:
 
 def wait_for_episode_start(events: dict, play_sounds: bool) -> bool:
     """Block between episodes until the operator explicitly starts recording."""
+    if os.getenv("LEROBOT_RECORD_AUTO_START", "").lower() in {"1", "true", "yes"}:
+        return not events["stop_recording"]
     events["start_episode"] = False
     log_say("Press S to start recording the next episode", play_sounds)
     while not events["start_episode"] and not events["stop_recording"]:
