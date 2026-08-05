@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![LeRobot](https://img.shields.io/badge/Built%20on-LeRobot-FFD21E)](https://github.com/huggingface/lerobot)
 [![Policy](https://img.shields.io/badge/Policy-pi0.5-7C3AED)](https://huggingface.co/lerobot/pi05_base)
-[![Hardware](https://img.shields.io/badge/Hardware-SO--101%20%2B%20Paxini-0F766E)](#hardware--data)
+[![Hardware](https://img.shields.io/badge/Hardware-SO--101%20%2B%20Paxini-0F766E)](#tactile-hardware)
 [![License](https://img.shields.io/badge/License-Apache%202.0-2563EB)](./LICENSE)
 [![Status](https://img.shields.io/badge/Status-Research%20Prototype-E11D48)](#project-status)
 
@@ -74,11 +74,39 @@
   </tr>
 </table>
 
+## Tactile hardware
+
+VTLA의 그리퍼에는 **Paxini GEN3 M3025 계열 분포형 촉각 센서 2개**를 장착했습니다. 두 센서는 gripper의 ring / pinky 쪽 접촉면에 배치되며, 센서당 77개씩 총 **154 taxel**의 접촉 신호를 수집합니다.
+
+<table>
+  <tr>
+    <th width="62%">SO-101 + Paxini tactile gripper</th>
+    <th width="38%">Custom sensor-mount CAD</th>
+  </tr>
+  <tr>
+    <td><img src="./media/readme/vtla/paxini_gripper_rig.jpg" alt="SO-101 robot with Paxini tactile gripper"></td>
+    <td><img src="./media/readme/vtla/paxini_sensor_mount_cad.jpg" alt="Paxini tactile sensor mount CAD"></td>
+  </tr>
+</table>
+
+| Item | Configuration |
+| --- | --- |
+| Sensor | Paxini GEN3 M3025-series distributed tactile sensor × 2 |
+| Placement | Parallel gripper ring / pinky contact surfaces |
+| Spatial elements | 77 taxels per sensor, **154 total** |
+| Stored tensor | `(2, 9, 9)` `float32` with corner padding |
+| Signal used | Z-axis normal-force channel |
+| Interface | Paxini high-speed board → UART at **921,600 baud** → background reader |
+
+각 프레임의 원시 154차원 신호는 센서의 공간 배치를 유지한 `(2, 9, 9)` 맵으로 변환됩니다. 따라서 모델은 단순 접촉 여부뿐 아니라 **접촉 위치와 압력 분포**까지 함께 학습할 수 있습니다.
+
 ## Architecture
 
 <p align="center">
-  <img src="./docs/tactile_pi05/vtla_architecture.png" alt="VTLA architecture" width="100%">
+  <img src="./media/readme/vtla/demoday_architecture.jpg" alt="pi0.5 and Paxini tactile architecture" width="100%">
 </p>
+
+<p align="center"><sub>Vision · language · tactile map · robot state → pi0.5 → 50-step action chunk. 슬라이드의 A1.5 표기는 저장소 실험명 A15에 해당합니다.</sub></p>
 
 VTLA는 세 가지 촉각 주입 방식을 같은 데이터와 학습 조건에서 비교합니다.
 
@@ -87,6 +115,17 @@ VTLA는 세 가지 촉각 주입 방식을 같은 데이터와 학습 조건에�
 | **A0** | `none` | 촉각을 사용하지 않는 vision-language-action baseline |
 | **A15** | `prefix` | CNN tactile encoder 출력을 PaliGemma prefix token으로 삽입 |
 | **A2** | `action_gated` | 접촉 통계로 Gemma action expert의 conditioning을 gating |
+
+<details>
+<summary><strong>Detailed model architecture</strong></summary>
+
+<br>
+
+<p align="center">
+  <img src="./docs/tactile_pi05/vtla_architecture.png" alt="Detailed VTLA architecture" width="100%">
+</p>
+
+</details>
 
 <details>
 <summary><strong>End-to-end pipeline</strong></summary>
