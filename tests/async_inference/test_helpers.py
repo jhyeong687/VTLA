@@ -34,7 +34,7 @@ from lerobot.async_inference.helpers import (  # noqa: E402
     resize_robot_observation_image,
 )
 from lerobot.configs.types import FeatureType, PolicyFeature
-from lerobot.utils.constants import OBS_IMAGES, OBS_STATE
+from lerobot.utils.constants import OBS_IMAGES, OBS_STATE, OBS_TACTILE
 
 # ---------------------------------------------------------------------
 # FPSTracker
@@ -245,6 +245,18 @@ def _create_mock_lerobot_features():
     }
 
 
+def _create_mock_lerobot_features_with_tactile():
+    tactile_key = f"{OBS_TACTILE}.primary"
+    return {
+        **_create_mock_lerobot_features(),
+        tactile_key: {
+            "dtype": "float32",
+            "shape": [2, 9, 9],
+            "names": ["dim_0", "dim_1", "dim_2"],
+        },
+    }
+
+
 def _create_mock_policy_image_features():
     """Create mock policy image features with different resolutions."""
     return {
@@ -256,6 +268,15 @@ def _create_mock_policy_image_features():
             type=FeatureType.VISUAL,
             shape=(3, 160, 160),  # Different resolution for second camera
         ),
+    }
+
+
+def _create_mock_policy_tactile_features():
+    return {
+        f"{OBS_TACTILE}.primary": PolicyFeature(
+            type=FeatureType.TACTILE,
+            shape=(2, 9, 9),
+        )
     }
 
 
@@ -332,6 +353,40 @@ def test_prepare_raw_observation():
     assert isinstance(phone_img, torch.Tensor)
 
 
+def test_prepare_raw_observation_with_expected_tactile():
+    """Tactile observations are preserved when the policy declares tactile features."""
+    tactile_key = f"{OBS_TACTILE}.primary"
+    tactile = np.arange(2 * 9 * 9, dtype=np.float32).reshape(2, 9, 9)
+    robot_obs = _create_mock_robot_observation()
+    robot_obs[tactile_key] = tactile
+    lerobot_features = _create_mock_lerobot_features_with_tactile()
+    policy_image_features = _create_mock_policy_image_features()
+    policy_tactile_features = _create_mock_policy_tactile_features()
+
+    prepared = prepare_raw_observation(
+        robot_obs, lerobot_features, policy_image_features, policy_tactile_features
+    )
+
+    assert tactile_key in prepared
+    assert isinstance(prepared[tactile_key], torch.Tensor)
+    assert prepared[tactile_key].dtype == torch.float32
+    assert prepared[tactile_key].shape == (2, 9, 9)
+    torch.testing.assert_close(prepared[tactile_key], torch.from_numpy(tactile))
+
+
+def test_prepare_raw_observation_drops_tactile_for_no_tactile_policy():
+    """No-tactile adapters should not receive tactile keys from a Paxini robot."""
+    tactile_key = f"{OBS_TACTILE}.primary"
+    robot_obs = _create_mock_robot_observation()
+    robot_obs[tactile_key] = np.ones((2, 9, 9), dtype=np.float32)
+    lerobot_features = _create_mock_lerobot_features_with_tactile()
+    policy_image_features = _create_mock_policy_image_features()
+
+    prepared = prepare_raw_observation(robot_obs, lerobot_features, policy_image_features, {})
+
+    assert tactile_key not in prepared
+
+
 def test_raw_observation_to_observation_basic():
     """Test the main raw_observation_to_observation function."""
     robot_obs = _create_mock_robot_observation()
@@ -363,6 +418,25 @@ def test_raw_observation_to_observation_basic():
     assert phone_img.dtype == torch.float32
     assert laptop_img.min() >= 0.0 and laptop_img.max() <= 1.0
     assert phone_img.min() >= 0.0 and phone_img.max() <= 1.0
+
+
+def test_raw_observation_to_observation_keeps_tactile_unscaled():
+    """Tactile tensors should not be image-normalized or given an image batch dimension."""
+    tactile_key = f"{OBS_TACTILE}.primary"
+    tactile = np.arange(2 * 9 * 9, dtype=np.float32).reshape(2, 9, 9)
+    robot_obs = _create_mock_robot_observation()
+    robot_obs[tactile_key] = tactile
+    lerobot_features = _create_mock_lerobot_features_with_tactile()
+    policy_image_features = _create_mock_policy_image_features()
+    policy_tactile_features = _create_mock_policy_tactile_features()
+
+    observation = raw_observation_to_observation(
+        robot_obs, lerobot_features, policy_image_features, policy_tactile_features
+    )
+
+    assert tactile_key in observation
+    assert observation[tactile_key].shape == (2, 9, 9)
+    torch.testing.assert_close(observation[tactile_key], torch.from_numpy(tactile))
 
 
 def test_raw_observation_to_observation_with_non_tensor_data():

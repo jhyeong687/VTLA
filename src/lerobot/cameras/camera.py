@@ -48,6 +48,7 @@ class Camera(abc.ABC):
         self.fps: int | None = config.fps
         self.width: int | None = config.width
         self.height: int | None = config.height
+        self.camera_key: str | None = None
 
     def __enter__(self):
         """

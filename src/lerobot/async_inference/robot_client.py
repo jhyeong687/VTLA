@@ -43,12 +43,15 @@ from pprint import pformat
 from queue import Queue
 from typing import Any
 
+import cv2
 import draccus
 import grpc
 import torch
 
+from lerobot.cameras.avfoundation import AVFoundationCameraConfig  # noqa: F401
 from lerobot.cameras.opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.realsense import RealSenseCameraConfig  # noqa: F401
+from lerobot.cameras.webrtc import WebRTCCameraConfig  # noqa: F401
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
@@ -64,6 +67,7 @@ from lerobot.transport import (
 )
 from lerobot.transport.utils import grpc_channel_options, send_bytes_in_chunks
 from lerobot.utils.import_utils import register_third_party_plugins
+from lerobot.utils.visualization_utils import init_rerun, log_rerun_data, shutdown_rerun
 
 from .configs import RobotClientConfig
 from .helpers import (
@@ -411,7 +415,22 @@ class RobotClient:
             start_time = time.perf_counter()
 
             raw_observation: RawObservation = self.robot.get_observation()
+
+            if self.config.image_resize_width and self.config.image_resize_height:
+                output_size = (self.config.image_resize_width, self.config.image_resize_height)
+                for camera_key in self.robot.cameras:
+                    image = raw_observation.get(camera_key)
+                    if image is not None:
+                        raw_observation[camera_key] = cv2.resize(
+                            image,
+                            output_size,
+                            interpolation=cv2.INTER_AREA,
+                        )
+
             raw_observation["task"] = task
+
+            if self.config.display_data:
+                log_rerun_data(observation=raw_observation, compress_images=True)
 
             with self.latest_action_lock:
                 latest_action = self.latest_action
@@ -485,31 +504,38 @@ class RobotClient:
 def async_client(cfg: RobotClientConfig):
     logging.info(pformat(asdict(cfg)))
 
-    # TODO: Assert if checking robot support is still needed with the plugin system
-    # if cfg.robot.type not in SUPPORTED_ROBOTS:
-    #     raise ValueError(f"Robot {cfg.robot.type} not yet supported!")
+    if cfg.display_data:
+        init_rerun(session_name="async_inference_client")
 
-    client = RobotClient(cfg)
+    try:
+        # TODO: Assert if checking robot support is still needed with the plugin system
+        # if cfg.robot.type not in SUPPORTED_ROBOTS:
+        #     raise ValueError(f"Robot {cfg.robot.type} not yet supported!")
 
-    if client.start():
-        client.logger.info("Starting action receiver thread...")
+        client = RobotClient(cfg)
 
-        # Create and start action receiver thread
-        action_receiver_thread = threading.Thread(target=client.receive_actions, daemon=True)
+        if client.start():
+            client.logger.info("Starting action receiver thread...")
 
-        # Start action receiver thread
-        action_receiver_thread.start()
+            # Create and start action receiver thread
+            action_receiver_thread = threading.Thread(target=client.receive_actions, daemon=True)
 
-        try:
-            # The main thread runs the control loop
-            client.control_loop(task=cfg.task)
+            # Start action receiver thread
+            action_receiver_thread.start()
 
-        finally:
-            client.stop()
-            action_receiver_thread.join()
-            if cfg.debug_visualize_queue_size:
-                visualize_action_queue_size(client.action_queue_size)
-            client.logger.info("Client stopped")
+            try:
+                # The main thread runs the control loop
+                client.control_loop(task=cfg.task)
+
+            finally:
+                client.stop()
+                action_receiver_thread.join()
+                if cfg.debug_visualize_queue_size:
+                    visualize_action_queue_size(client.action_queue_size)
+                client.logger.info("Client stopped")
+    finally:
+        if cfg.display_data:
+            shutdown_rerun()
 
 
 if __name__ == "__main__":

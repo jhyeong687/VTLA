@@ -17,16 +17,16 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project.urls]
-homepage = "https://huggingface.co/lerobot"
-documentation = "https://huggingface.co/docs/lerobot/index"
-source = "https://github.com/huggingface/lerobot"
-issues = "https://github.com/huggingface/lerobot/issues"
+homepage = "https://github.com/jhyeong687/VTLA"
+documentation = "https://github.com/jhyeong687/VTLA/tree/main/docs/tactile_pi05"
+source = "https://github.com/jhyeong687/VTLA"
+issues = "https://github.com/jhyeong687/VTLA/issues"
 discord = "https://discord.gg/s3KuuzsPFb"
 
 [project]
 name = "lerobot"
 version = "0.5.2"
-description = "🤗 LeRobot: State-of-the-art Machine Learning for Real-World Robotics in Pytorch"
+description = "VTLA: Vision-Tactile-Language-Action research stack for SO-101 and Paxini tactile sensing"
 dynamic = ["readme"]
 license = { text = "Apache-2.0" }
 requires-python = ">=3.12"
@@ -65,29 +65,30 @@ dependencies = [
     "opencv-python-headless>=4.9.0,<4.14.0",
     "Pillow>=10.0.0,<13.0.0",
     "einops>=0.8.0,<0.9.0",
-
     # Config & Hub
     "draccus==0.10.0", # TODO: Relax version constraint
     "huggingface-hub>=1.0.0,<2.0.0",
     "requests>=2.32.0,<3.0.0",
-
     # Environments
     # NOTE: gymnasium is used in lerobot.envs (lerobot-train, lerobot-eval), policies/factory,
     # and robots/unitree. Moving it to an optional extra would require import guards across many
     # tightly-coupled modules. Candidate for a future refactor to decouple envs from the core.
     "gymnasium>=1.1.1,<2.0.0",
-
     # Serialization & checkpointing
     "safetensors>=0.4.3,<1.0.0",
-
     # Lightweight utilities
     "packaging>=24.2,<26.0",
     "termcolor>=2.4.0,<4.0.0",
     "tqdm>=4.66.0,<5.0.0",
-
     # Build tools (required by opencv-python-headless on some platforms)
     "cmake>=3.29.0.1,<4.2.0",
     "setuptools>=71.0.0,<81.0.0",
+    "paxini-utils",
+    "feetech-servo-sdk>=1.0.0",
+    "deepdiff>=8.6.2",
+    "rerun-sdk>=0.26.2",
+    "aiortc>=1.14.0",
+    "pyobjc-framework-avfoundation>=12.2; sys_platform == 'darwin'",
 ]
 
 # Optional dependencies
@@ -293,6 +294,7 @@ lerobot-imgtransform-viz="lerobot.scripts.lerobot_imgtransform_viz:main"
 lerobot-edit-dataset="lerobot.scripts.lerobot_edit_dataset:main"
 lerobot-setup-can="lerobot.scripts.lerobot_setup_can:main"
 lerobot-rollout="lerobot.scripts.lerobot_rollout:main"
+lerobot-offline-action-eval="lerobot.scripts.lerobot_offline_action_eval:main"
 
 # ---------------- Tool Configurations ----------------
 [tool.setuptools.package-data]
@@ -476,6 +478,9 @@ ignore_errors = false
 [[tool.mypy.overrides]]
 module = "lerobot.transport.*"
 ignore_errors = false
+
+[tool.uv.sources]
+paxini-utils = { git = "https://github.com/riverfog7/paxini-utils" }
 
 # [[tool.mypy.overrides]]
 # module = "lerobot.scripts.*"

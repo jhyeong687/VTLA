@@ -25,11 +25,13 @@ python -m lerobot.async_inference.policy_server \
 """
 
 import logging
+import os
 import pickle  # nosec
 import threading
 import time
 from concurrent import futures
 from dataclasses import asdict
+from pathlib import Path
 from pprint import pformat
 from queue import Empty, Queue
 from typing import Any
@@ -59,6 +61,27 @@ from .helpers import (
     observations_similar,
     raw_observation_to_observation,
 )
+
+
+def normalize_pretrained_name_or_path(pretrained_name_or_path: str) -> str:
+    """Map repo-local client model paths to the server's model root."""
+    model_root = os.environ.get("MODEL_ROOT")
+    if not model_root:
+        return pretrained_name_or_path
+
+    path = Path(pretrained_name_or_path).expanduser()
+    if path.is_absolute():
+        return str(path)
+
+    parts = path.parts
+    if parts and parts[0] == ".":
+        parts = parts[1:]
+
+    if not parts or parts[0] != "hf_models":
+        return pretrained_name_or_path
+
+    relative_to_model_root = Path(*parts[1:]) if len(parts) > 1 else Path()
+    return str(Path(model_root).expanduser() / relative_to_model_root)
 
 
 class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
@@ -95,6 +118,10 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
     @property
     def policy_image_features(self):
         return self.policy.config.image_features
+
+    @property
+    def policy_tactile_features(self):
+        return getattr(self.policy.config, "tactile_features", None)
 
     def _reset_server(self) -> None:
         """Flushes server state when new client connects."""
@@ -141,6 +168,10 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
             f"Device: {policy_specs.device}"
         )
 
+        pretrained_name_or_path = normalize_pretrained_name_or_path(policy_specs.pretrained_name_or_path)
+        if pretrained_name_or_path != policy_specs.pretrained_name_or_path:
+            self.logger.info(f"Resolved pretrained path on server: {pretrained_name_or_path}")
+
         self.device = policy_specs.device
         self.policy_type = policy_specs.policy_type  # act, pi0, etc.
         self.lerobot_features = policy_specs.lerobot_features
@@ -149,14 +180,14 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
         policy_class = get_policy_class(self.policy_type)
 
         start = time.perf_counter()
-        self.policy = policy_class.from_pretrained(policy_specs.pretrained_name_or_path)
+        self.policy = policy_class.from_pretrained(pretrained_name_or_path)
         self.policy.to(self.device)
 
         # Load preprocessor and postprocessor, overriding device to match requested device
         device_override = {"device": self.device}
         self.preprocessor, self.postprocessor = make_pre_post_processors(
             self.policy.config,
-            pretrained_path=policy_specs.pretrained_name_or_path,
+            pretrained_path=pretrained_name_or_path,
             preprocessor_overrides={
                 "device_processor": device_override,
                 "rename_observations_processor": {"rename_map": policy_specs.rename_map},
@@ -343,6 +374,7 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
             observation_t.get_observation(),
             self.lerobot_features,
             self.policy_image_features,
+            self.policy_tactile_features,
         )
         prepare_time = time.perf_counter() - start_prepare
 

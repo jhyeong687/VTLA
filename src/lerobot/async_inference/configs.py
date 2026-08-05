@@ -136,6 +136,12 @@ class RobotClientConfig:
     # Control behavior configuration
     chunk_size_threshold: float = field(default=0.5, metadata={"help": "Threshold for chunk size control"})
     fps: int = field(default=DEFAULT_FPS, metadata={"help": "Frames per second"})
+    image_resize_width: int = field(
+        default=0, metadata={"help": "Resize camera observations to this width before sending; 0 disables"}
+    )
+    image_resize_height: int = field(
+        default=0, metadata={"help": "Resize camera observations to this height before sending; 0 disables"}
+    )
 
     # Aggregate function configuration (CLI-compatible)
     aggregate_fn_name: str = field(
@@ -144,6 +150,7 @@ class RobotClientConfig:
     )
 
     # Debug configuration
+    display_data: bool = field(default=False, metadata={"help": "Display live robot observations in Rerun"})
     debug_visualize_queue_size: bool = field(
         default=False, metadata={"help": "Visualize the action queue size"}
     )
@@ -179,6 +186,11 @@ class RobotClientConfig:
         if self.actions_per_chunk <= 0:
             raise ValueError(f"actions_per_chunk must be positive, got {self.actions_per_chunk}")
 
+        if (self.image_resize_width == 0) != (self.image_resize_height == 0):
+            raise ValueError("image_resize_width and image_resize_height must both be 0 or both be positive")
+        if self.image_resize_width < 0 or self.image_resize_height < 0:
+            raise ValueError("image resize dimensions cannot be negative")
+
         self.aggregate_fn = get_aggregate_function(self.aggregate_fn_name)
 
     @classmethod
@@ -196,8 +208,11 @@ class RobotClientConfig:
             "client_device": self.client_device,
             "chunk_size_threshold": self.chunk_size_threshold,
             "fps": self.fps,
+            "image_resize_width": self.image_resize_width,
+            "image_resize_height": self.image_resize_height,
             "actions_per_chunk": self.actions_per_chunk,
             "task": self.task,
+            "display_data": self.display_data,
             "debug_visualize_queue_size": self.debug_visualize_queue_size,
             "aggregate_fn_name": self.aggregate_fn_name,
         }
