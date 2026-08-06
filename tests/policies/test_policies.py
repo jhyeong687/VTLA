@@ -25,7 +25,6 @@ pytest.importorskip("datasets", reason="datasets is required (install lerobot[da
 
 from packaging import version
 from safetensors.torch import load_file
-from tests.artifacts.policies.save_policy_to_safetensors import get_policy_stats
 
 from lerobot.configs.default import DatasetConfig
 from lerobot.configs.train import TrainPipelineConfig
@@ -50,6 +49,7 @@ from lerobot.utils.feature_utils import dataset_to_policy_features
 from lerobot.utils.import_utils import is_package_available
 from lerobot.utils.random_utils import seeded_context
 from lerobot.utils.utils import cycle
+from tests.artifacts.policies.save_policy_to_safetensors import get_policy_stats
 from tests.utils import DEVICE, require_cpu, require_env, require_x86_64_kernel
 
 # Policies that require optional heavy dependencies to instantiate
