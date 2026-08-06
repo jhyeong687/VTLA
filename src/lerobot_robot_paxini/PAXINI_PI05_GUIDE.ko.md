@@ -57,51 +57,51 @@ Pi0.5 policy
 
 공식 기준은 `origin/main`입니다.
 
-| 영역 | 공식 LeRobot | 현재 repo 변경 |
-| --- | --- | --- |
-| Robot type | 기본 SO100/SO101 follower만 있음 | `paxini_so101_follower` 추가 |
-| Tactile feature type | 기본 feature에 tactile 없음 | `FeatureType.TACTILE`, `OBS_TACTILE` 경로 추가 |
-| Robot observation | joint/camera 중심 | `observation.tactile.primary` 추가 |
-| Pi0/Pi0.5 policy | image/state/action 중심 | tactile prefix token encoder 추가 |
-| Tactile encoder | 없음 | CNN/attention CNN encoder 추가 |
-| Dataset feature 변환 | image/state/action 중심 | tactile feature를 float32 tensor로 저장 |
-| Processor | tactile batch/validation 없음 | tactile batch dimension/validation processor 추가 |
-| Sensor reader | 없음 | serial, mock, PXSR CSV reader 추가 |
-| CSV smoke test | 없음 | `make_pi05_smoke_dataset.py` 추가 |
+| 영역                 | 공식 LeRobot                     | 현재 repo 변경                                    |
+| -------------------- | -------------------------------- | ------------------------------------------------- |
+| Robot type           | 기본 SO100/SO101 follower만 있음 | `paxini_so101_follower` 추가                      |
+| Tactile feature type | 기본 feature에 tactile 없음      | `FeatureType.TACTILE`, `OBS_TACTILE` 경로 추가    |
+| Robot observation    | joint/camera 중심                | `observation.tactile.primary` 추가                |
+| Pi0/Pi0.5 policy     | image/state/action 중심          | tactile prefix token encoder 추가                 |
+| Tactile encoder      | 없음                             | CNN/attention CNN encoder 추가                    |
+| Dataset feature 변환 | image/state/action 중심          | tactile feature를 float32 tensor로 저장           |
+| Processor            | tactile batch/validation 없음    | tactile batch dimension/validation processor 추가 |
+| Sensor reader        | 없음                             | serial, mock, PXSR CSV reader 추가                |
+| CSV smoke test       | 없음                             | `make_pi05_smoke_dataset.py` 추가                 |
 
 ## 4. 변경 파일 요약
 
 ### Paxini 전용 패키지
 
-| 파일 | 역할 |
-| --- | --- |
-| `src/lerobot_robot_paxini/__init__.py` | Paxini robot/config export |
-| `config_paxini_so101.py` | tactile port, taxel 수, representation 설정 |
-| `paxini_reader.py` | serial/mock/CSV tactile reader |
-| `paxini_so101.py` | SO101 follower에 tactile observation 추가 |
-| `tactile_render.py` | 154 taxel -> heatmap 또는 2x9x9 변환 |
-| `types.py` | `PaxiniSample` dataclass |
-| `make_pi05_smoke_dataset.py` | 센서 없이 LeRobot dataset 생성 |
-| `README.md` | 짧은 사용 가이드 |
-| `PAXINI_PI05_GUIDE.ko.md` | 이 문서 |
+| 파일                                   | 역할                                        |
+| -------------------------------------- | ------------------------------------------- |
+| `src/lerobot_robot_paxini/__init__.py` | Paxini robot/config export                  |
+| `config_paxini_so101.py`               | tactile port, taxel 수, representation 설정 |
+| `paxini_reader.py`                     | serial/mock/CSV tactile reader              |
+| `paxini_so101.py`                      | SO101 follower에 tactile observation 추가   |
+| `tactile_render.py`                    | 154 taxel -> heatmap 또는 2x9x9 변환        |
+| `types.py`                             | `PaxiniSample` dataclass                    |
+| `make_pi05_smoke_dataset.py`           | 센서 없이 LeRobot dataset 생성              |
+| `README.md`                            | 짧은 사용 가이드                            |
+| `PAXINI_PI05_GUIDE.ko.md`              | 이 문서                                     |
 
 ### LeRobot core 변경
 
-| 파일 | 변경 내용 |
-| --- | --- |
-| `src/lerobot/robots/__init__.py` | `lerobot_robot_paxini` 자동 import로 robot type 등록 |
-| `src/lerobot/utils/constants.py` | tactile observation prefix 추가 |
-| `src/lerobot/utils/feature_utils.py` | tactile feature를 dataset/policy feature로 변환 |
-| `src/lerobot/configs/types.py` | tactile feature type 추가 |
-| `src/lerobot/configs/policies.py` | tactile feature 접근용 helper 추가 |
-| `src/lerobot/processor/batch_processor.py` | tactile tensor/array에 batch dimension 추가 |
-| `src/lerobot/processor/tactile_processor.py` | tactile shape validation/temporal filter |
-| `src/lerobot/processor/__init__.py` | tactile processor export |
-| `src/lerobot/policies/tactile/encoder.py` | tactile CNN token encoder 추가 |
-| `src/lerobot/policies/pi0/configuration_pi0.py` | Pi0 tactile config 추가 |
-| `src/lerobot/policies/pi0/modeling_pi0.py` | Pi0 tactile token 입력 추가 |
-| `src/lerobot/policies/pi05/configuration_pi05.py` | Pi0.5 tactile config 추가 |
-| `src/lerobot/policies/pi05/modeling_pi05.py` | Pi0.5 tactile token 입력 추가 |
+| 파일                                              | 변경 내용                                            |
+| ------------------------------------------------- | ---------------------------------------------------- |
+| `src/lerobot/robots/__init__.py`                  | `lerobot_robot_paxini` 자동 import로 robot type 등록 |
+| `src/lerobot/utils/constants.py`                  | tactile observation prefix 추가                      |
+| `src/lerobot/utils/feature_utils.py`              | tactile feature를 dataset/policy feature로 변환      |
+| `src/lerobot/configs/types.py`                    | tactile feature type 추가                            |
+| `src/lerobot/configs/policies.py`                 | tactile feature 접근용 helper 추가                   |
+| `src/lerobot/processor/batch_processor.py`        | tactile tensor/array에 batch dimension 추가          |
+| `src/lerobot/processor/tactile_processor.py`      | tactile shape validation/temporal filter             |
+| `src/lerobot/processor/__init__.py`               | tactile processor export                             |
+| `src/lerobot/policies/tactile/encoder.py`         | tactile CNN token encoder 추가                       |
+| `src/lerobot/policies/pi0/configuration_pi0.py`   | Pi0 tactile config 추가                              |
+| `src/lerobot/policies/pi0/modeling_pi0.py`        | Pi0 tactile token 입력 추가                          |
+| `src/lerobot/policies/pi05/configuration_pi05.py` | Pi0.5 tactile config 추가                            |
+| `src/lerobot/policies/pi05/modeling_pi05.py`      | Pi0.5 tactile token 입력 추가                        |
 
 ## 5. 센서 데이터 해석
 
@@ -417,4 +417,3 @@ torch.Size([4, 1, 32])
 9. 충분한 episode 기록
 10. Pi0.5 fine-tune
 11. `lerobot-rollout`으로 실제 실행
-

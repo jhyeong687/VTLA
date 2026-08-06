@@ -1,401 +1,274 @@
-## VTLA LeRobot Tactile Fork
-
-이 저장소는 Hugging Face의 원래 `LeRobot`을 기반으로, VTLA/VLA 실험에서 촉각 센서를 같이 쓰기 위해 수정한 fork입니다.
-원래 LeRobot의 로봇 제어, 카메라 기록, 데이터셋 저장, 학습 스크립트 구조는 최대한 유지했고, 여기에 Paxini tactile sensor를 SO-101 follower와 함께 읽을 수 있는 경로를 추가했습니다.
-
-쉽게 말하면 원래 LeRobot이 아래 데이터를 주로 다뤘다면,
-
-- 로봇 관절 상태: `observation.state`
-- 카메라 이미지: `observation.images.*`
-- 행동 라벨: `action`
-- 언어/task 입력: policy에 따라 language token
-
-이 fork는 거기에 아래 촉각 데이터를 하나 더 붙입니다.
-
-- 촉각 맵: `observation.tactile.primary`
-
-촉각 값을 RGB 이미지처럼 억지로 바꾸지 않고, `float32` 2D tactile map으로 저장합니다. 그래서 나중에 Pi0/Pi0.5 같은 VLA policy가 이미지, 로봇 상태, 언어 입력과 함께 tactile token을 따로 사용할 수 있습니다.
-
-### 전체 데이터 흐름
-
-현재 구현된 흐름은 다음 순서입니다.
-
-1. LeRobot의 기존 `SOFollower`가 모터 상태와 카메라 이미지를 읽습니다.
-2. 새로 추가한 `PaxiniSO101Follower`가 `SOFollower`를 상속해서 기존 observation을 그대로 받습니다.
-3. 그 다음 Paxini tactile 센서를 `SerialPaxiniReader`로 읽습니다.
-4. UART response에서 taxel raw 값을 꺼냅니다.
-5. `TactileHeatmapRenderer`가 taxel 위치 정보를 이용해서 2D tactile heatmap으로 바꿉니다.
-6. 최종 observation에 `observation.tactile.primary`가 추가됩니다.
-7. LeRobotDataset 저장 시 이 값은 `FeatureType.TACTILE`로 분류됩니다.
-8. Pi0/Pi0.5 학습 시 tactile feature를 prefix token으로 encode해서 vision/language token과 함께 넣습니다.
-
-정리하면, 이 fork의 목표는 `카메라 + 로봇 상태 + action`만 쓰던 LeRobot 데이터 구조에 `촉각 맵`을 정식 feature로 추가하는 것입니다.
-
-### 원래 LeRobot과 가장 큰 차이
-
-| 구분 | 원래 LeRobot | 이 VTLA fork |
-| --- | --- | --- |
-| 로봇 타입 | `so100_follower`, `so101_follower` 등 기본 follower | `paxini_so101_follower` 추가 |
-| tactile 센서 | 기본 지원 없음 | Paxini UART 센서 reader 추가 |
-| tactile 데이터 저장 | 없음 | `observation.tactile.primary` |
-| tactile feature 타입 | 없음 | `FeatureType.TACTILE` |
-| tactile 값 형태 | 없음 | normalized `float32` 2D map |
-| VLA 학습 | image/state/language/action 중심 | Pi0/Pi0.5에서 tactile prefix token 추가 |
-| 다른 센서 적용 | 직접 robot/policy 수정 필요 | sensor reader와 renderer만 바꾸면 재사용 가능하게 구성 |
-
-### 실제로 추가/수정된 코드
-
-#### 1. Paxini 로봇 통합 코드
-
-`src/lerobot_robot_paxini/` 아래에 Paxini tactile sensor를 SO-101 follower에 붙이는 코드가 들어 있습니다.
-
-- `config_paxini_so101.py`
-  - `paxini_so101_follower` robot type을 등록합니다.
-  - tactile serial port, baudrate, device id, read address, taxel dtype, tactile map size 같은 설정을 둡니다.
-  - 기본값은 테스트가 쉽도록 `tactile_mock=True`입니다. 실제 센서를 읽으려면 `--robot.tactile_mock=false`로 바꿔야 합니다.
-
-- `paxini_so101.py`
-  - 기존 `SOFollower`를 상속합니다.
-  - 기존 motor/camera observation에 `observation.tactile.primary`를 추가합니다.
-  - force/torque 값도 `paxini.fx`, `paxini.fy`, `paxini.fz`, `paxini.tx`, `paxini.ty`, `paxini.tz`로 같이 넣습니다.
-
-- `paxini_reader.py`
-  - Paxini UART protocol을 Python에서 읽을 수 있게 구현한 파일입니다.
-  - vendor 예제 코드의 구조를 반영해서 request header는 `55 AA`, response header는 `AA 55`로 처리합니다.
-  - little-endian length/address field, device id, function code, status byte, LRC checksum을 검증합니다.
-  - `MockPaxiniReader`도 있어서 실제 센서 없이 recording/training pipeline 테스트가 가능합니다.
-
-- `tactile_render.py`
-  - taxel raw vector를 2D tactile map으로 변환합니다.
-  - `tactile_map_path`가 있으면 xlsx에서 taxel 좌표를 읽습니다.
-  - 없으면 mock taxel map을 만들어서 테스트합니다.
-  - 기본 출력 크기는 `64 x 64`입니다.
-
-- `types.py`
-  - taxel 배열과 force/torque 값을 담는 `PaxiniSample` dataclass가 있습니다.
-
-#### 2. LeRobot feature/type 수정
-
-LeRobot이 tactile 값을 그냥 state vector로 착각하지 않도록 feature type을 추가했습니다.
-
-- `src/lerobot/configs/types.py`
-  - `FeatureType.TACTILE` 추가
-
-- `src/lerobot/utils/constants.py`
-  - `OBS_TACTILE = "observation.tactile"` 추가
-
-- `src/lerobot/utils/feature_utils.py`
-  - hardware feature에서 tactile feature를 dataset feature로 변환합니다.
-  - `observation.tactile.*`를 `FeatureType.STATE`가 아니라 `FeatureType.TACTILE`로 분류합니다.
-
-- `src/lerobot/datasets/feature_utils.py`
-  - dataset metadata를 policy input feature로 바꿀 때 tactile feature를 유지하도록 연결됩니다.
-
-#### 3. Policy 쪽 tactile 입력 추가
-
-- `src/lerobot/configs/policies.py`
-  - policy config에서 tactile input feature만 쉽게 가져올 수 있는 helper를 추가했습니다.
-
-- `src/lerobot/policies/tactile/`
-  - tactile map을 token embedding으로 바꾸는 공통 encoder가 있습니다.
-  - `cnn`과 `attention` encoder type을 지원합니다.
-
-- `src/lerobot/processor/tactile_processor.py`
-  - tactile shape 검증, temporal filtering 같은 processor step을 넣을 수 있게 했습니다.
-
-- `src/lerobot/policies/pi0/`
-  - Pi0에서 tactile map을 prefix token으로 넣을 수 있게 수정했습니다.
-  - dataset에 `FeatureType.TACTILE` feature가 있으면 자동으로 tactile encoder를 구성합니다.
-
-- `src/lerobot/policies/pi05/`
-  - Pi0.5도 Pi0와 같은 방식으로 tactile prefix token을 사용할 수 있게 수정했습니다.
-  - upstream pretrained Pi0/Pi0.5 checkpoint를 불러올 때 tactile encoder/head는 새로 초기화될 수 있도록 strict load를 조정했습니다.
-
-### 실제 센서로 record 하는 예시
-
-기본 config는 `tactile_mock=True`라서 tactile 값이 가짜로 생성됩니다. 실제 Paxini 센서를 연결할 때는 아래처럼 mock을 꺼야 합니다.
-
-```bash
-lerobot-record \
-  --robot.type=paxini_so101_follower \
-  --robot.port=/dev/ttyACM0 \
-  --robot.id=follower_arm \
-  --robot.tactile_mock=false \
-  --robot.tactile_port=/dev/ttyUSB0 \
-  --robot.tactile_baudrate=115200 \
-  --robot.tactile_device_id=1 \
-  --robot.tactile_read_func_code=0x7B \
-  --robot.tactile_read_addr=0x040E \
-  --robot.tactile_taxel_dtype=uint16 \
-  --robot.tactile_image_size=64 \
-  --dataset.repo_id=<your_hf_id>/<your_dataset_name> \
-  --dataset.single_task="your task" \
-  --dataset.num_episodes=10
-```
-
-센서가 `/dev/ttyUSB0`에 보이지 않으면 WSL에서 USB pass-through가 제대로 잡혔는지 먼저 확인해야 합니다. Windows/WSL 환경에서는 포트 이름이 바뀔 수 있으므로 `ls /dev/ttyUSB* /dev/ttyACM*`로 확인하는 것이 좋습니다.
-
-### tactile map xlsx를 쓰는 경우
-
-Paxini 센서의 taxel 실제 좌표가 있으면 xlsx 파일을 넘길 수 있습니다.
-
-```bash
---robot.tactile_map_path=/path/to/taxel_map.xlsx
-```
-
-xlsx에는 다음 중 하나의 column 조합이 있어야 합니다.
-
-- `x_mm`, `y_mm`
-- `x`, `y`
-- `x(mm)`, `y(mm)`
-
-좌표 파일을 넣으면 taxel raw vector가 실제 센서 배열 위치에 맞춰 `64 x 64` tactile map으로 render됩니다. 좌표 파일이 없으면 mock grid를 사용하므로, 실제 실험 결과 분석에는 좌표 파일을 넣는 쪽이 좋습니다.
-
-### Pi0 / Pi0.5 tactile training
-
-dataset에 `observation.tactile.primary`가 들어 있고, 해당 feature가 `FeatureType.TACTILE`로 잡히면 Pi0/Pi0.5는 tactile feature를 자동으로 감지합니다.
-
-Pi0 예시:
-
-```bash
-lerobot-train \
-  --policy.type=pi0 \
-  --dataset.repo_id=<your_hf_id>/<your_tactile_dataset> \
-  --policy.path=<pi0_pretrained_checkpoint_or_hub_id> \
-  --policy.tactile_encoder_type=cnn \
-  --policy.tactile_n_tokens=1 \
-  --batch_size=4 \
-  --steps=10000
-```
-
-Pi0.5 예시:
-
-```bash
-lerobot-train \
-  --policy.type=pi05 \
-  --dataset.repo_id=<your_hf_id>/<your_tactile_dataset> \
-  --policy.path=<pi05_pretrained_checkpoint_or_hub_id> \
-  --policy.tactile_encoder_type=cnn \
-  --policy.tactile_n_tokens=1 \
-  --batch_size=4 \
-  --steps=10000
-```
-
-권장 사용 방식:
-
-- tactile map이 단순하고 데이터가 많지 않으면 `--policy.tactile_encoder_type=cnn`부터 시작합니다.
-- taxel 수가 많고 공간 패턴이 중요하면 `--policy.tactile_encoder_type=attention`도 비교합니다.
-- `--policy.tactile_n_tokens=1`로 먼저 smoke test를 돌리고, 성능 비교용으로 `2` 또는 `4`를 실험합니다.
-- Pi0/Pi0.5는 큰 모델이므로 24GB GPU에서는 `batch_size=4` 또는 `8`부터 시작하는 것이 안전합니다.
-- pretrained checkpoint 없이 처음부터 학습하면 비용이 커지고 결과가 불안정할 수 있습니다.
-
-### 학습 전에 꼭 확인할 것
-
-짧은 smoke test를 먼저 돌리는 것을 권장합니다.
-
-1. recording 1 episode만 실행합니다.
-2. 저장된 dataset metadata에 `observation.tactile.primary`가 있는지 확인합니다.
-3. shape가 `(64, 64)`인지 확인합니다.
-4. tactile 값이 전부 0인지 확인합니다. 전부 0이면 serial read 또는 taxel decode가 실패한 것입니다.
-5. `lerobot-train --steps=10 --batch_size=2`로 import/model forward만 먼저 확인합니다.
-6. 그 다음 긴 training을 돌립니다.
-
-### 다른 tactile 센서를 쓰려면
-
-다른 촉각 센서를 쓰더라도 LeRobot 전체를 다시 고칠 필요는 없습니다. 아래 계약만 지키면 policy 쪽은 대부분 재사용할 수 있습니다.
-
-- 최종 observation key는 `observation.tactile.<name>` 형식으로 둡니다.
-- 값은 `float32` tactile map으로 둡니다.
-- dataset feature type은 `FeatureType.TACTILE`이어야 합니다.
-- policy config의 tactile input shape와 dataset shape가 같아야 합니다.
-
-즉, 다른 센서를 붙일 때 주로 바꿀 곳은 reader/renderer입니다.
-
-- serial protocol이 다르면 `src/lerobot_robot_paxini/paxini_reader.py`를 새 센서용 reader로 교체합니다.
-- taxel 배치가 다르면 `src/lerobot_robot_paxini/tactile_render.py`의 mapping logic을 바꿉니다.
-- observation key와 `FeatureType.TACTILE` 구조는 그대로 유지하는 것이 좋습니다.
-
-### 이 repo를 만든 이유
-
-VTLA 실험에서는 시각 정보만으로는 접촉 여부, 미끄러짐, 압력 변화, 삽입/정렬 같은 정보를 놓치기 쉽습니다.
-그래서 이 fork는 LeRobot의 기존 vision-language-action pipeline에 tactile signal을 정식 observation으로 넣는 것을 목표로 합니다.
-
-현재 상태는 Paxini/SO-101 tactile 실험을 시작할 수 있는 baseline입니다. 실험을 안정화하려면 실제 센서 frame format, taxel 좌표 파일, normalization scale, dataset 품질 확인을 프로젝트 환경에 맞게 조정해야 합니다.
-
-<p align="center">
-  <img alt="LeRobot, Hugging Face Robotics Library" src="./media/readme/lerobot-logo-thumbnail.png" width="100%">
-</p>
-
 <div align="center">
 
-[![Tests](https://github.com/huggingface/lerobot/actions/workflows/latest_deps_tests.yml/badge.svg?branch=main)](https://github.com/huggingface/lerobot/actions/workflows/latest_deps_tests.yml?query=branch%3Amain)
-[![Tests](https://github.com/huggingface/lerobot/actions/workflows/docker_publish.yml/badge.svg?branch=main)](https://github.com/huggingface/lerobot/actions/workflows/docker_publish.yml?query=branch%3Amain)
-[![Python versions](https://img.shields.io/pypi/pyversions/lerobot)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/huggingface/lerobot/blob/main/LICENSE)
-[![Status](https://img.shields.io/pypi/status/lerobot)](https://pypi.org/project/lerobot/)
-[![Version](https://img.shields.io/pypi/v/lerobot)](https://pypi.org/project/lerobot/)
-[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.1-ff69b4.svg)](https://github.com/huggingface/lerobot/blob/main/CODE_OF_CONDUCT.md)
-[![Discord](https://img.shields.io/badge/Discord-Join_Us-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/q8Dzzpym3f)
+# VTLA
+
+### Vision–Tactile–Language–Action for SO-101 + Paxini
+
+시각·촉각·언어를 함께 이해해 로봇 행동을 생성하는 **pi0.5 기반 멀티모달 로봇 학습 스택**
+
+[![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![LeRobot](https://img.shields.io/badge/Built%20on-LeRobot-FFD21E)](https://github.com/huggingface/lerobot)
+[![Policy](https://img.shields.io/badge/Policy-pi0.5-7C3AED)](https://huggingface.co/lerobot/pi05_base)
+[![Hardware](https://img.shields.io/badge/Hardware-SO--101%20%2B%20Paxini-0F766E)](#tactile-hardware)
+[![License](https://img.shields.io/badge/License-Apache%202.0-2563EB)](./LICENSE)
+[![Status](https://img.shields.io/badge/Status-Research%20Prototype-E11D48)](#project-status)
+
+<br>
+
+<img src="./media/readme/vtla/wrist_demo.gif" alt="SO-101 cup manipulation from the wrist camera" width="820">
+
+<sub>SO-101 wrist-camera view · “Pick one cup from the stacked cups and place it on the left side.”</sub>
 
 </div>
 
-**LeRobot** aims to provide models, datasets, and tools for real-world robotics in PyTorch. The goal is to lower the barrier to entry so that everyone can contribute to and benefit from shared datasets and pretrained models.
+---
 
-🤗 A hardware-agnostic, Python-native interface that standardizes control across diverse platforms, from low-cost arms (SO-100) to humanoids.
+## Overview
 
-🤗 A standardized, scalable LeRobotDataset format (Parquet + MP4 or images) hosted on the Hugging Face Hub, enabling efficient storage, streaming and visualization of massive robotic datasets.
+**VTLA**는 Hugging Face [LeRobot](https://github.com/huggingface/lerobot)을 기반으로, SO-101 로봇과 Paxini 촉각 센서를 pi0.5 Vision-Language-Action 정책에 연결한 연구용 프로젝트입니다.
 
-🤗 State-of-the-art policies that have been shown to transfer to the real-world ready for training and deployment.
+기존의 `카메라 + 로봇 상태 + 언어 + 행동` 흐름에 `observation.tactile.primary`를 정식 입력으로 추가합니다. 촉각 신호는 RGB 이미지로 변환하지 않고 `float32` 공간 맵으로 보존하며, prefix token 또는 action-side gating 방식으로 정책에 주입할 수 있습니다.
 
-🤗 Comprehensive support for the open-source ecosystem to democratize physical AI.
+> 저장소 이름은 **VTLA**지만, 기존 LeRobot 생태계 및 CLI 호환성을 위해 Python 패키지 이름과 명령어는 `lerobot`을 유지합니다.
 
-## Quick Start
+### What this repository adds
 
-LeRobot can be installed directly from PyPI.
+| Area       | VTLA extension                                       |
+| ---------- | ---------------------------------------------------- |
+| Robot      | `paxini_so101_follower` wrapper와 Paxini UART reader |
+| Tactile    | 154 taxel을 `(2, 9, 9)` `float32` 맵으로 저장        |
+| Policy     | pi0.5 tactile prefix 및 action-gated injection       |
+| Cameras    | macOS AVFoundation 및 원격 WebRTC 입력               |
+| Training   | A0 / A15 / A2 PEFT-LoRA 실험 하네스                  |
+| Evaluation | 로봇 실행 전 offline action comparison과 진단 그래프 |
 
-```bash
-pip install lerobot
-lerobot-info
-```
+## Demo
 
-> [!IMPORTANT]
-> For detailed installation guide, please see the [Installation Documentation](https://huggingface.co/docs/lerobot/installation).
+<table>
+  <tr>
+    <th width="50%">Wrist camera</th>
+    <th width="50%">Paxini tactile response</th>
+  </tr>
+  <tr>
+    <td><img src="./media/readme/vtla/wrist_demo.gif" alt="Wrist-camera cup manipulation"></td>
+    <td><img src="./media/readme/vtla/tactile_demo.gif" alt="Paxini tactile taxel response"></td>
+  </tr>
+  <tr>
+    <td align="center"><code>observation.images.wrist</code></td>
+    <td align="center">ring / pinky · 154 taxels</td>
+  </tr>
+</table>
 
-## Robots & Control
+### Three synchronized camera views
 
-<div align="center">
-  <img src="./media/readme/robots_control_video.webp" width="640px" alt="Reachy 2 Demo">
-</div>
+<table>
+  <tr>
+    <th>Top</th>
+    <th>Wrist</th>
+    <th>Belly</th>
+  </tr>
+  <tr>
+    <td><img src="./media/readme/vtla/camera_top.jpg" alt="Top camera"></td>
+    <td><img src="./media/readme/vtla/camera_wrist.jpg" alt="Wrist camera"></td>
+    <td><img src="./media/readme/vtla/camera_belly.jpg" alt="Belly camera"></td>
+  </tr>
+</table>
 
-LeRobot provides a unified `Robot` class interface that decouples control logic from hardware specifics. It supports a wide range of robots and teleoperation devices.
+## Tactile hardware
 
-```python
-from lerobot.robots.myrobot import MyRobot
+VTLA의 그리퍼에는 **Paxini GEN3 M3025 계열 분포형 촉각 센서 2개**를 장착했습니다. 두 센서는 gripper의 ring / pinky 쪽 접촉면에 배치되며, 센서당 77개씩 총 **154 taxel**의 접촉 신호를 수집합니다.
 
-# Connect to a robot
-robot = MyRobot(config=...)
-robot.connect()
+<table>
+  <tr>
+    <th width="62%">SO-101 + Paxini tactile gripper</th>
+    <th width="38%">Custom sensor-mount CAD</th>
+  </tr>
+  <tr>
+    <td><img src="./media/readme/vtla/paxini_gripper_rig.jpg" alt="SO-101 robot with Paxini tactile gripper"></td>
+    <td><img src="./media/readme/vtla/paxini_sensor_mount_cad.jpg" alt="Paxini tactile sensor mount CAD"></td>
+  </tr>
+</table>
 
-# Read observation and send action
-obs = robot.get_observation()
-action = model.select_action(obs)
-robot.send_action(action)
-```
+| Item             | Configuration                                                          |
+| ---------------- | ---------------------------------------------------------------------- |
+| Sensor           | Paxini GEN3 M3025-series distributed tactile sensor × 2                |
+| Placement        | Parallel gripper ring / pinky contact surfaces                         |
+| Spatial elements | 77 taxels per sensor, **154 total**                                    |
+| Stored tensor    | `(2, 9, 9)` `float32` with corner padding                              |
+| Signal used      | Z-axis normal-force channel                                            |
+| Interface        | Paxini high-speed board → UART at **921,600 baud** → background reader |
 
-**Supported Hardware:** SO100, LeKiwi, Koch, HopeJR, OMX, EarthRover, Reachy2, Gamepads, Keyboards, Phones, OpenARM, Unitree G1.
+각 프레임의 원시 154차원 신호는 센서의 공간 배치를 유지한 `(2, 9, 9)` 맵으로 변환됩니다. 따라서 모델은 단순 접촉 여부뿐 아니라 **접촉 위치와 압력 분포**까지 함께 학습할 수 있습니다.
 
-While these devices are natively integrated into the LeRobot codebase, the library is designed to be extensible. You can easily implement the Robot interface to utilize LeRobot's data collection, training, and visualization tools for your own custom robot.
-
-For detailed hardware setup guides, see the [Hardware Documentation](https://huggingface.co/docs/lerobot/integrate_hardware).
-
-## LeRobot Dataset
-
-To solve the data fragmentation problem in robotics, we utilize the **LeRobotDataset** format.
-
-- **Structure:** Synchronized MP4 videos (or images) for vision and Parquet files for state/action data.
-- **HF Hub Integration:** Explore thousands of robotics datasets on the [Hugging Face Hub](https://huggingface.co/lerobot).
-- **Tools:** Seamlessly delete episodes, split by indices/fractions, add/remove features, and merge multiple datasets.
-
-```python
-from lerobot.datasets.lerobot_dataset import LeRobotDataset
-
-# Load a dataset from the Hub
-dataset = LeRobotDataset("lerobot/aloha_mobile_cabinet")
-
-# Access data (automatically handles video decoding)
-episode_index=0
-print(f"{dataset[episode_index]['action'].shape=}\n")
-```
-
-Learn more about it in the [LeRobotDataset Documentation](https://huggingface.co/docs/lerobot/lerobot-dataset-v3)
-
-## SoTA Models
-
-LeRobot implements state-of-the-art policies in pure PyTorch, covering Imitation Learning, Reinforcement Learning, and Vision-Language-Action (VLA) models, with more coming soon. It also provides you with the tools to instrument and inspect your training process.
+## Architecture
 
 <p align="center">
-  <img alt="Gr00t Architecture" src="./media/readme/VLA_architecture.jpg" width="640px">
+  <img src="./media/readme/vtla/demoday_architecture.jpg" alt="pi0.5 and Paxini tactile architecture" width="100%">
 </p>
 
-Training a policy is as simple as running a script configuration:
+<p align="center"><sub>Vision · language · tactile map · robot state → pi0.5 → 50-step action chunk. 슬라이드의 A1.5 표기는 저장소 실험명 A15에 해당합니다.</sub></p>
 
-```bash
-lerobot-train \
-  --policy=act \
-  --dataset.repo_id=lerobot/aloha_mobile_cabinet
-```
+VTLA는 세 가지 촉각 주입 방식을 같은 데이터와 학습 조건에서 비교합니다.
 
-| Category                   | Models                                                                                                                                                                                                                  |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Imitation Learning**     | [ACT](./docs/source/policy_act_README.md), [Diffusion](./docs/source/policy_diffusion_README.md), [VQ-BeT](./docs/source/policy_vqbet_README.md), [Multitask DiT Policy](./docs/source/policy_multi_task_dit_README.md) |
-| **Reinforcement Learning** | [HIL-SERL](./docs/source/hilserl.mdx), [TDMPC](./docs/source/policy_tdmpc_README.md) & QC-FQL (coming soon)                                                                                                             |
-| **VLAs Models**            | [Pi0Fast](./docs/source/pi0fast.mdx), [Pi0.5](./docs/source/pi05.mdx), [GR00T N1.5](./docs/source/policy_groot_README.md), [SmolVLA](./docs/source/policy_smolvla_README.md), [XVLA](./docs/source/xvla.mdx)            |
-
-Similarly to the hardware, you can easily implement your own policy & leverage LeRobot's data collection, training, and visualization tools, and share your model to the HF Hub
-
-For detailed policy setup guides, see the [Policy Documentation](https://huggingface.co/docs/lerobot/bring_your_own_policies).
-
-## Inference & Evaluation
-
-Evaluate your policies in simulation or on real hardware using the unified evaluation script. LeRobot supports standard benchmarks like **LIBERO**, **MetaWorld** and more to come.
-
-```bash
-# Evaluate a policy on the LIBERO benchmark
-lerobot-eval \
-  --policy.path=lerobot/pi0_libero_finetuned \
-  --env.type=libero \
-  --env.task=libero_object \
-  --eval.n_episodes=10
-```
-
-Learn how to implement your own simulation environment or benchmark and distribute it from the HF Hub by following the [EnvHub Documentation](https://huggingface.co/docs/lerobot/envhub)
-
-## Resources
-
-- **[Documentation](https://huggingface.co/docs/lerobot/index):** The complete guide to tutorials & API.
-- **[Chinese Tutorials: LeRobot+SO-ARM101中文教程-同济子豪兄](https://zihao-ai.feishu.cn/wiki/space/7589642043471924447)** Detailed doc for assembling, teleoperate, dataset, train, deploy. Verified by Seed Studio and 5 global hackathon players.
-- **[Discord](https://discord.gg/q8Dzzpym3f):** Join the `LeRobot` server to discuss with the community.
-- **[X](https://x.com/LeRobotHF):** Follow us on X to stay up-to-date with the latest developments.
-- **[Robot Learning Tutorial](https://huggingface.co/spaces/lerobot/robot-learning-tutorial):** A free, hands-on course to learn robot learning using LeRobot.
-
-## Citation
-
-If you use LeRobot in your project, please cite the GitHub repository to acknowledge the ongoing development and contributors:
-
-```bibtex
-@misc{cadene2024lerobot,
-    author = {Cadene, Remi and Alibert, Simon and Soare, Alexander and Gallouedec, Quentin and Zouitine, Adil and Palma, Steven and Kooijmans, Pepijn and Aractingi, Michel and Shukor, Mustafa and Aubakirova, Dana and Russi, Martino and Capuano, Francesco and Pascal, Caroline and Choghari, Jade and Moss, Jess and Wolf, Thomas},
-    title = {LeRobot: State-of-the-art Machine Learning for Real-World Robotics in Pytorch},
-    howpublished = "\url{https://github.com/huggingface/lerobot}",
-    year = {2024}
-}
-```
-
-If you are referencing our research or the academic paper, please also cite our ICLR publication:
+| Variant | Tactile injection | Description                                                |
+| ------- | ----------------- | ---------------------------------------------------------- |
+| **A0**  | `none`            | 촉각을 사용하지 않는 vision-language-action baseline       |
+| **A15** | `prefix`          | CNN tactile encoder 출력을 PaliGemma prefix token으로 삽입 |
+| **A2**  | `action_gated`    | 접촉 통계로 Gemma action expert의 conditioning을 gating    |
 
 <details>
-<summary><b>ICLR 2026 Paper</b></summary>
+<summary><strong>Detailed model architecture</strong></summary>
 
-```bibtex
-@inproceedings{cadenelerobot,
-  title={LeRobot: An Open-Source Library for End-to-End Robot Learning},
-  author={Cadene, Remi and Alibert, Simon and Capuano, Francesco and Aractingi, Michel and Zouitine, Adil and Kooijmans, Pepijn and Choghari, Jade and Russi, Martino and Pascal, Caroline and Palma, Steven and Shukor, Mustafa and Moss, Jess and Soare, Alexander and Aubakirova, Dana and Lhoest, Quentin and Gallou\'edec, Quentin and Wolf, Thomas},
-  booktitle={The Fourteenth International Conference on Learning Representations},
-  year={2026},
-  url={https://arxiv.org/abs/2602.22818}
-}
-```
+<br>
+
+<p align="center">
+  <img src="./docs/tactile_pi05/vtla_architecture.png" alt="Detailed VTLA architecture" width="100%">
+</p>
 
 </details>
 
-## Contribute
+<details>
+<summary><strong>End-to-end pipeline</strong></summary>
 
-We welcome contributions from everyone in the community! To get started, please read our [CONTRIBUTING.md](https://github.com/huggingface/lerobot/blob/main/CONTRIBUTING.md) guide. Whether you're adding a new feature, improving documentation, or fixing a bug, your help and feedback are invaluable. We're incredibly excited about the future of open-source robotics and can't wait to work with you on what's next—thank you for your support!
+<br>
 
 <p align="center">
-  <img alt="SO101 Video" src="./media/readme/so100_video.webp" width="640px">
+  <img src="./docs/tactile_pi05/vtla_pipeline.png" alt="VTLA training and rollout pipeline" width="100%">
 </p>
 
-<div align="center">
-<sub>Built by the <a href="https://huggingface.co/lerobot">LeRobot</a> team at <a href="https://huggingface.co">Hugging Face</a> with ❤️</sub>
-</div>
+</details>
+
+## Hardware & data
+
+실험 데이터는 SO-101 follower, Paxini dual tactile sensor, 3개 RGB 카메라로 수집했습니다.
+
+| Dataset snapshot |                                                            Value |
+| ---------------- | ---------------------------------------------------------------: |
+| Task             | Pick one cup from the stacked cups and place it on the left side |
+| Episodes         |                                                           **60** |
+| Frames           |                                                       **36,625** |
+| Sampling rate    |                                                       **30 FPS** |
+| RGB cameras      |                                          **3 × 1280 × 720**, AV1 |
+| Tactile          |                          **154 taxels → `(2, 9, 9)`**, `float32` |
+| Robot state      |                                             **6 DoF**, `float32` |
+| Action           |                             **6 DoF × 50-step chunk**, `float32` |
+
+### Dataset features
+
+```text
+observation.images.top       video [720, 1280, 3]
+observation.images.wrist     video [720, 1280, 3]
+observation.images.belly     video [720, 1280, 3]
+observation.tactile.primary  float32 [2, 9, 9]
+observation.state            float32 [6]
+action                       float32 [6]
+```
+
+원본 MP4, Parquet, checkpoint는 용량 때문에 Git에서 제외합니다. 이 저장소에는 재현 가능한 코드, 메타데이터 구조, 문서, 그리고 README용으로 축약한 시각 자료만 포함합니다.
+
+## Preliminary offline evaluation
+
+실제 로봇에 action을 보내기 전에, 녹화된 episode 0의 408개 frame에서 pi0.5 예측과 demonstration action을 비교했습니다.
+
+<p align="center">
+  <img src="./media/readme/vtla/offline_eval_summary.png" alt="A0 A15 A2 offline evaluation summary" width="100%">
+</p>
+
+| Model                    | First-action MAE ↓ | Chunk MAE ↓ | Direction agreement ↑ | Mean inference |
+| ------------------------ | -----------------: | ----------: | --------------------: | -------------: |
+| A0 · no tactile          |              8.832 |       9.094 |                55.22% |        0.191 s |
+| **A15 · tactile prefix** |          **7.847** |   **8.420** |            **56.52%** |        0.203 s |
+| A2 · action-gated        |              8.355 |       8.915 |                55.18% |        0.198 s |
+
+이 단일 episode의 예비 결과에서는 **A15 tactile prefix**가 가장 낮은 action error를 기록했습니다. 이는 제한된 offline 비교이며, 실제 rollout 성공률이나 일반화 성능을 의미하지 않습니다.
+
+<details>
+<summary><strong>View A15 joint-wise prediction traces</strong></summary>
+
+<br>
+
+<p align="center">
+  <img src="./media/readme/vtla/a15_action_comparison.jpg" alt="A15 demonstrated versus predicted first actions" width="900">
+</p>
+
+</details>
+
+## Repository map
+
+```text
+VTLA/
+├── src/lerobot_robot_paxini/   # Paxini reader, SO-101 wrapper, tactile rendering
+├── src/lerobot/policies/
+│   ├── tactile/                # Reusable tactile token encoders
+│   └── pi05/                   # pi0.5 tactile integration
+├── experiments/pi05_cup_left/ # A0 / A15 / A2 PEFT experiment harness
+├── user_scripts/               # Server, client, offline evaluation entrypoints
+├── local_scripts/              # Recording and dataset utility scripts
+└── docs/tactile_pi05/          # Architecture, rollout, and handoff guides
+```
+
+## Quick start
+
+### 1. Install
+
+```bash
+git clone https://github.com/jhyeong687/VTLA.git
+cd VTLA
+
+uv sync --python 3.12 \
+  --extra core_scripts \
+  --extra paxini \
+  --extra pi \
+  --extra async \
+  --extra peft
+
+source .venv/bin/activate
+```
+
+### 2. Verify the pipeline
+
+실제 장비를 연결하기 전에는 mock tactile 입력과 짧은 smoke test로 import, dataset feature, model forward를 먼저 확인하는 것을 권장합니다.
+
+```bash
+# Dataset / policy extras included above
+lerobot-info
+
+# One-step experiment smoke tests
+bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A0 1
+bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A15 1
+bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A2 1
+```
+
+### 3. Offline action comparison
+
+```bash
+EPISODE=0 STRIDE=10 MAX_FRAMES=10 \
+  bash user_scripts/offline_eval.sh
+```
+
+전체 frame 평가:
+
+```bash
+EPISODE=0 STRIDE=1 MAX_FRAMES=0 \
+  bash user_scripts/offline_eval.sh
+```
+
+## Documentation
+
+- [pi0.5 + Paxini rollout guide](./docs/tactile_pi05/README.md)
+- [Architecture reference](./docs/tactile_pi05/ARCHITECTURE.md)
+- [Offline evaluation handoff](./docs/tactile_pi05/OFFLINE_EVAL_HANDOFF.md)
+- [A0 / A15 / A2 training experiments](./experiments/pi05_cup_left/README.md)
+- [Paxini + pi0.5 Korean guide](./src/lerobot_robot_paxini/PAXINI_PI05_GUIDE.ko.md)
+
+## Project status
+
+VTLA는 실제 하드웨어 연구를 위한 **research prototype**입니다. 센서 포트, calibration, taxel scale, camera mapping, checkpoint 경로는 장비 및 실행 환경에 맞게 검증해야 합니다. 실제 로봇 rollout 전에는 emergency stop과 joint limit을 확인하고 offline evaluation을 먼저 수행하세요.
+
+## Acknowledgements
+
+이 프로젝트는 Hugging Face의 [LeRobot](https://github.com/huggingface/lerobot) 위에 구축되었습니다. upstream 저작권 고지와 Apache 2.0 라이선스를 유지합니다. pi0.5 및 LeRobot 생태계의 연구·오픈소스 기여자들에게 감사드립니다.
+
+## License
+
+[Apache License 2.0](./LICENSE)

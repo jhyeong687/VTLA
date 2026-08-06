@@ -25,6 +25,7 @@ node_modules/
 
 # Lock files
 poetry.lock
+uv.lock
 Pipfile.lock
 
 ### Build & Distribution ###
@@ -76,7 +77,7 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
-!tests/artifacts
+tests/artifacts/
 
 ### Logs & Temporary Files ###
 logs/
@@ -164,7 +165,6 @@ wandb/
 
 # Data folders
 data/
-datasets/
 outputs/
 
 # Translations

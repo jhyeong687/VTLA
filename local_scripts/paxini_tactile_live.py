@@ -10,7 +10,9 @@ from lerobot_robot_paxini.paxini_reader import SerialPaxiniReader
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Print live Paxini tactile statistics from the serial sensor.")
+    parser = argparse.ArgumentParser(
+        description="Print live Paxini tactile statistics from the serial sensor."
+    )
     parser.add_argument("--port", default="/dev/cu.usbmodem750A687485311")
     parser.add_argument("--baudrate", type=int, default=921600)
     parser.add_argument("--num-taxels", type=int, default=154)
@@ -18,8 +20,12 @@ def main() -> None:
     parser.add_argument("--scale", type=float, default=0.1)
     parser.add_argument("--hz", type=float, default=10.0)
     parser.add_argument("--timeout-s", type=float, default=0.5)
-    parser.add_argument("--samples", type=int, default=0, help="Stop after this many samples; 0 means run forever.")
-    parser.add_argument("--sync", action="store_true", help="Read synchronously instead of using the background reader.")
+    parser.add_argument(
+        "--samples", type=int, default=0, help="Stop after this many samples; 0 means run forever."
+    )
+    parser.add_argument(
+        "--sync", action="store_true", help="Read synchronously instead of using the background reader."
+    )
     args = parser.parse_args()
 
     reader = SerialPaxiniReader(

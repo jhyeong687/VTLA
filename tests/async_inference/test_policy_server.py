@@ -118,6 +118,26 @@ def _make_obs(state: torch.Tensor, timestep: int = 0, must_go: bool = False):
 # -----------------------------------------------------------------------------
 
 
+@skip_if_package_missing("grpcio", "grpc")
+def test_normalize_pretrained_name_or_path_uses_server_model_root(monkeypatch):
+    from lerobot.async_inference.policy_server import normalize_pretrained_name_or_path
+
+    monkeypatch.setenv("MODEL_ROOT", "/workspace/vtla/hf_models")
+
+    assert (
+        normalize_pretrained_name_or_path(
+            "hf_models/pi05-so101-paxini-cup-left-adapters/all_checkpoints/run/checkpoints/000001"
+        )
+        == "/workspace/vtla/hf_models/pi05-so101-paxini-cup-left-adapters/all_checkpoints/run/checkpoints/000001"
+    )
+    assert (
+        normalize_pretrained_name_or_path("./hf_models/pi05/checkpoint")
+        == "/workspace/vtla/hf_models/pi05/checkpoint"
+    )
+    assert normalize_pretrained_name_or_path("/tmp/local-model") == "/tmp/local-model"
+    assert normalize_pretrained_name_or_path("Leedohyeon/model") == "Leedohyeon/model"
+
+
 def test_time_action_chunk(policy_server):
     """Verify that `_time_action_chunk` assigns correct timestamps and timesteps."""
     start_ts = time.time()

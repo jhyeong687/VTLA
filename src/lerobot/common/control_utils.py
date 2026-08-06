@@ -234,7 +234,7 @@ class _TerminalKeyboardListener:
             try:
                 termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._old_termios)
             except Exception:
-                pass
+                logging.debug("Failed to restore terminal settings.", exc_info=True)
             self._old_termios = None
 
     def _run(self) -> None:
@@ -244,10 +244,7 @@ class _TerminalKeyboardListener:
                 if not readable:
                     continue
                 char = sys.stdin.read(1)
-                if char == "\x1b":
-                    key = self._read_escape_sequence()
-                else:
-                    key = char
+                key = self._read_escape_sequence() if char == "\x1b" else char
                 _handle_control_key(key, self.events)
             except Exception as exc:
                 logging.debug("Terminal keyboard listener failed: %s", exc)

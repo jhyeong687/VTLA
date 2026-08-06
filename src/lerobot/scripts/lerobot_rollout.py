@@ -124,8 +124,10 @@ Usage examples
 
 import logging
 
+from lerobot.cameras.avfoundation import AVFoundationCameraConfig  # noqa: F401
 from lerobot.cameras.opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.realsense import RealSenseCameraConfig  # noqa: F401
+from lerobot.cameras.webrtc import WebRTCCameraConfig  # noqa: F401
 from lerobot.cameras.zmq import ZMQCameraConfig  # noqa: F401
 from lerobot.configs import parser
 from lerobot.robots import (  # noqa: F401

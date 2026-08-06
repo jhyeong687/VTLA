@@ -121,9 +121,12 @@ class AddBatchDimensionObservationStep(ObservationProcessorStep):
             elif (key == OBS_TACTILE or key.startswith(f"{OBS_TACTILE}.")) and isinstance(value, Tensor):
                 if value.dim() in (2, 3):
                     observation[key] = value.unsqueeze(0)
-            elif (key == OBS_TACTILE or key.startswith(f"{OBS_TACTILE}.")) and isinstance(value, np.ndarray):
-                if value.ndim in (2, 3):
-                    observation[key] = value[None, ...]
+            elif (
+                (key == OBS_TACTILE or key.startswith(f"{OBS_TACTILE}."))
+                and isinstance(value, np.ndarray)
+                and value.ndim in (2, 3)
+            ):
+                observation[key] = value[None, ...]
         return observation
 
     def transform_features(

@@ -18,9 +18,10 @@ import builtins
 import copy
 import logging
 import math
+import os
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, TypedDict, Unpack
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, Unpack
 
 import torch
 import torch.nn.functional as F  # noqa: N812
@@ -46,7 +47,7 @@ else:
     _gated_residual = None
     layernorm_forward = None
     PaliGemmaForConditionalGenerationWithPiGemma = None
-from lerobot.configs import PreTrainedConfig
+from lerobot.configs import FeatureType, PolicyFeature, PreTrainedConfig
 from lerobot.utils.constants import (
     ACTION,
     OBS_LANGUAGE_ATTENTION_MASK,
@@ -549,6 +550,65 @@ class PaliGemmaWithExpertModel(
         return [prefix_output, suffix_output], prefix_past_key_values
 
 
+class ActionSideGatedTactileEncoder(nn.Module):
+    """Small tactile tokenizer for contact-gated action-expert conditioning."""
+
+    def __init__(self, input_shape: tuple[int, ...], feature_dim: int, contact_threshold: float = 0.05):
+        super().__init__()
+        if len(input_shape) != 3 or input_shape[-2:] != (9, 9):
+            raise ValueError(f"Action-side tactile expects shape (C, 9, 9), got {input_shape}.")
+
+        self.input_channels = input_shape[0]
+        self.feature_dim = feature_dim
+        self.contact_threshold = contact_threshold
+        self.token_mlp = nn.Sequential(
+            nn.Linear(5, 64),
+            nn.SiLU(),
+            nn.Linear(64, feature_dim),
+        )
+        self.gate_mlp = nn.Sequential(
+            nn.Linear(4, 32),
+            nn.SiLU(),
+            nn.Linear(32, 1),
+        )
+
+    def forward(self, tactile: Tensor, mask: Tensor | None = None) -> tuple[Tensor, Tensor, Tensor]:
+        tactile = tactile.float()
+        if tactile.dim() == 3:
+            tactile = tactile.unsqueeze(0)
+        if tactile.dim() != 4 or tactile.shape[1] != self.input_channels or tactile.shape[-2:] != (9, 9):
+            raise ValueError(
+                f"Expected tactile tensor (B, {self.input_channels}, 9, 9), got {tuple(tactile.shape)}."
+            )
+
+        bsize = tactile.shape[0]
+        blocks = tactile.reshape(bsize, self.input_channels, 3, 3, 3, 3)
+        blocks = blocks.permute(0, 1, 2, 4, 3, 5).reshape(bsize, self.input_channels * 9, 3, 3)
+
+        mean = blocks.mean(dim=(-2, -1))
+        max_value = blocks.amax(dim=(-2, -1))
+        std = blocks.std(dim=(-2, -1), unbiased=False)
+        delta_mean = torch.zeros_like(mean)
+        active_ratio = (blocks > self.contact_threshold).float().mean(dim=(-2, -1))
+        block_features = torch.stack([mean, max_value, std, delta_mean, active_ratio], dim=-1)
+
+        tokens = self.token_mlp(block_features)
+        global_norm = tactile.flatten(1).norm(dim=-1, keepdim=True)
+        global_mean = tactile.flatten(1).mean(dim=-1, keepdim=True)
+        global_max = tactile.flatten(1).amax(dim=-1, keepdim=True)
+        contact_area = (tactile > self.contact_threshold).float().flatten(1).mean(dim=-1, keepdim=True)
+        gate_input = torch.cat([global_norm, global_mean, global_max, contact_area], dim=-1)
+        gate = torch.sigmoid(self.gate_mlp(gate_input))
+
+        tokens = tokens * gate[:, None, :]
+        if mask is None:
+            token_mask = torch.ones(bsize, tokens.shape[1], dtype=torch.bool, device=tactile.device)
+        else:
+            token_mask = mask[:, None].expand(bsize, tokens.shape[1])
+
+        return tokens, token_mask, gate.squeeze(-1)
+
+
 class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
     """Core PI05 PyTorch model."""
 
@@ -590,7 +650,18 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
                 )
                 for feature in config.tactile_features.values()
             ]
+            if config.tactile_injection_mode == "prefix"
+            else []
         )
+        self.action_tactile_encoder = None
+        if config.tactile_injection_mode == "action_gated" and config.tactile_features:
+            first_tactile_feature = next(iter(config.tactile_features.values()))
+            self.action_tactile_encoder = ActionSideGatedTactileEncoder(
+                input_shape=tuple(first_tactile_feature.shape),
+                feature_dim=action_expert_config.width,
+                contact_threshold=config.tactile_contact_threshold,
+            )
+        self.last_tactile_gate: Tensor | None = None
 
         self.time_mlp_in = nn.Linear(action_expert_config.width, action_expert_config.width)
         self.time_mlp_out = nn.Linear(action_expert_config.width, action_expert_config.width)
@@ -687,7 +758,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
             self.tactile_encoders, tactile_maps, tactile_masks, strict=True
         ):
 
-            def tactile_embed_func(tactile):
+            def tactile_embed_func(tactile, encoder=encoder):
                 return encoder(tactile)
 
             tactile_emb = self._apply_checkpoint(tactile_embed_func, tactile)
@@ -719,7 +790,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
 
         return embs, pad_masks, att_masks
 
-    def embed_suffix(self, noisy_actions, timestep):
+    def embed_suffix(self, noisy_actions, timestep, action_tactile_embs=None, action_tactile_masks=None):
         """Embed noisy_actions, timestep to prepare for Expert Gemma processing."""
         embs = []
         pad_masks = []
@@ -751,6 +822,11 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         action_time_emb = action_emb
         adarms_cond = time_emb
 
+        if action_tactile_embs is not None:
+            embs.append(action_tactile_embs)
+            pad_masks.append(action_tactile_masks)
+            att_masks += [0] * action_tactile_embs.shape[1]
+
         embs.append(action_time_emb)
         bsize, action_time_dim = action_time_emb.shape[:2]
         action_time_mask = torch.ones(bsize, action_time_dim, dtype=torch.bool, device=timestep.device)
@@ -765,6 +841,17 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         att_masks = att_masks[None, :].expand(bsize, len(att_masks))
 
         return embs, pad_masks, att_masks, adarms_cond
+
+    def embed_action_tactile(self, tactile_maps=None, tactile_masks=None):
+        if self.action_tactile_encoder is None or not tactile_maps:
+            self.last_tactile_gate = None
+            return None, None
+
+        tactile = tactile_maps[0]
+        tactile_mask = tactile_masks[0] if tactile_masks else None
+        tokens, token_mask, gate = self.action_tactile_encoder(tactile, tactile_mask)
+        self.last_tactile_gate = gate.detach()
+        return tokens, token_mask
 
     def forward(
         self,
@@ -783,10 +870,15 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         x_t = time_expanded * noise + (1 - time_expanded) * actions
         u_t = noise - actions
 
+        prefix_tactile_maps = tactile_maps if self.config.tactile_injection_mode == "prefix" else None
+        prefix_tactile_masks = tactile_masks if self.config.tactile_injection_mode == "prefix" else None
         prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
-            images, img_masks, tokens, masks, tactile_maps, tactile_masks
+            images, img_masks, tokens, masks, prefix_tactile_maps, prefix_tactile_masks
         )
-        suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(x_t, time)
+        action_tactile_embs, action_tactile_masks = self.embed_action_tactile(tactile_maps, tactile_masks)
+        suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(
+            x_t, time, action_tactile_embs, action_tactile_masks
+        )
 
         if (
             self.paligemma_with_expert.paligemma.model.language_model.layers[0].self_attn.q_proj.weight.dtype
@@ -857,9 +949,12 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
             )  # Use config max_action_dim for internal processing
             noise = self.sample_noise(actions_shape, device)
 
+        prefix_tactile_maps = tactile_maps if self.config.tactile_injection_mode == "prefix" else None
+        prefix_tactile_masks = tactile_masks if self.config.tactile_injection_mode == "prefix" else None
         prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
-            images, img_masks, tokens, masks, tactile_maps, tactile_masks
+            images, img_masks, tokens, masks, prefix_tactile_maps, prefix_tactile_masks
         )
+        action_tactile_embs, action_tactile_masks = self.embed_action_tactile(tactile_maps, tactile_masks)
         prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
         prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
 
@@ -887,6 +982,8 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
                     past_key_values=past_key_values,
                     x_t=input_x_t,
                     timestep=current_timestep,
+                    action_tactile_embs=action_tactile_embs,
+                    action_tactile_masks=action_tactile_masks,
                 )
 
             if self._rtc_enabled():
@@ -918,9 +1015,13 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         past_key_values,
         x_t,
         timestep,
+        action_tactile_embs=None,
+        action_tactile_masks=None,
     ):
         """Apply one denoising step of the noise `x_t` at a given timestep."""
-        suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(x_t, timestep)
+        suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(
+            x_t, timestep, action_tactile_embs, action_tactile_masks
+        )
 
         suffix_len = suffix_pad_masks.shape[1]
         batch_size = prefix_pad_masks.shape[0]
@@ -969,6 +1070,14 @@ class PI05Policy(PreTrainedPolicy):
         """
         require_package("transformers", extra="pi")
         super().__init__(config)
+        dataset_meta = kwargs.get("dataset_meta")
+        if config.tactile_injection_mode != "none" and dataset_meta is not None:
+            for key, feature in getattr(dataset_meta, "features", {}).items():
+                if "tactile" in key and key not in config.input_features:
+                    config.input_features[key] = PolicyFeature(
+                        type=FeatureType.TACTILE,
+                        shape=tuple(feature["shape"]),
+                    )
         config.validate_features()
         self.config = config
 
@@ -983,6 +1092,156 @@ class PI05Policy(PreTrainedPolicy):
         self.model.to(config.device)
 
         self.reset()
+
+    @classmethod
+    def _is_local_peft_adapter(cls, pretrained_name_or_path: str | Path) -> bool:
+        return (Path(pretrained_name_or_path) / "adapter_config.json").is_file()
+
+    def _load_model_safetensors(
+        self,
+        pretrained_name_or_path: str | Path,
+        *,
+        cache_dir: str | Path | None = None,
+        force_download: bool = False,
+        resume_download: bool | None = None,
+        proxies: dict | None = None,
+        token: str | bool | None = None,
+        revision: str | None = None,
+        local_files_only: bool = False,
+        strict: bool = True,
+        required: bool = False,
+    ) -> bool:
+        try:
+            from safetensors.torch import load_file
+            from transformers.utils import cached_file
+
+            resolved_file = cached_file(
+                pretrained_name_or_path,
+                "model.safetensors",
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                token=token,
+                revision=revision,
+                local_files_only=local_files_only,
+            )
+            original_state_dict = load_file(resolved_file)
+            print(f"✓ Loaded state dict from {resolved_file}")
+        except Exception as e:
+            message = f"Could not load state dict from {pretrained_name_or_path}: {e}"
+            if required:
+                raise FileNotFoundError(message) from e
+            print(message)
+            print("Returning model without loading pretrained weights")
+            return False
+
+        fixed_state_dict = self._fix_pytorch_state_dict_keys(original_state_dict, self.config)
+
+        # PI05 checkpoints may be saved with OpenPI-style keys, while the LeRobot
+        # module stores the full implementation under self.model.
+        remapped_state_dict = {}
+        remap_count = 0
+        for key, value in fixed_state_dict.items():
+            if not key.startswith("model."):
+                remapped_state_dict[f"model.{key}"] = value
+                remap_count += 1
+            else:
+                remapped_state_dict[key] = value
+
+        if remap_count > 0:
+            print(f"Remapped {remap_count} state dict keys")
+
+        load_strict = strict and not bool(self.config.tactile_features)
+        missing_keys, unexpected_keys = self.load_state_dict(remapped_state_dict, strict=load_strict)
+
+        if missing_keys:
+            print(f"Missing keys when loading state dict: {len(missing_keys)} keys")
+            for key in missing_keys[:5]:
+                print(f"  - {key}")
+            if len(missing_keys) > 5:
+                print(f"  ... and {len(missing_keys) - 5} more")
+
+        if unexpected_keys:
+            print(f"Unexpected keys when loading state dict: {len(unexpected_keys)} keys")
+            for key in unexpected_keys[:5]:
+                print(f"  - {key}")
+            if len(unexpected_keys) > 5:
+                print(f"  ... and {len(unexpected_keys) - 5} more")
+
+        if not missing_keys and not unexpected_keys:
+            print("All keys loaded successfully!")
+
+        return True
+
+    @classmethod
+    def _from_peft_adapter(
+        cls: builtins.type[T],
+        pretrained_name_or_path: str | Path,
+        *,
+        config: PreTrainedConfig | None = None,
+        force_download: bool = False,
+        resume_download: bool | None = None,
+        proxies: dict | None = None,
+        token: str | bool | None = None,
+        cache_dir: str | Path | None = None,
+        local_files_only: bool = False,
+        revision: str | None = None,
+        **kwargs: Any,
+    ) -> T:
+        require_package("peft", extra="peft")
+        from peft import PeftConfig, PeftModel
+
+        adapter_path = str(pretrained_name_or_path)
+        peft_config = PeftConfig.from_pretrained(adapter_path)
+
+        if config is None:
+            config = PreTrainedConfig.from_pretrained(
+                adapter_path,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                token=token,
+                cache_dir=cache_dir,
+                local_files_only=local_files_only,
+                revision=revision,
+                **kwargs,
+            )
+
+        base_model_name_or_path = os.environ.get("PI05_BASE_PATH") or peft_config.base_model_name_or_path
+        if not base_model_name_or_path:
+            raise ValueError("No base model path found in adapter_config.json or PI05_BASE_PATH.")
+
+        print(f"Loading PI05 base model for PEFT adapter from: {base_model_name_or_path}")
+        model = cls(config, **kwargs)
+        model._load_model_safetensors(
+            base_model_name_or_path,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            resume_download=resume_download,
+            proxies=proxies,
+            token=token,
+            revision=revision,
+            local_files_only=local_files_only,
+            strict=False,
+            required=True,
+        )
+
+        print(f"Loading PI05 PEFT adapter from: {adapter_path}")
+        peft_model = PeftModel.from_pretrained(model, adapter_path, config=peft_config, is_trainable=False)
+        if hasattr(peft_model, "merge_and_unload"):
+            try:
+                policy = peft_model.merge_and_unload()
+            except Exception as e:
+                logging.warning("Could not merge PEFT adapter into PI05 policy; using PEFT wrapper: %s", e)
+                policy = peft_model
+        else:
+            policy = peft_model
+
+        policy.config = config
+        policy.to(config.device)
+        policy.eval()
+        return policy
 
     @classmethod
     def from_pretrained(
@@ -1009,6 +1268,20 @@ class PI05Policy(PreTrainedPolicy):
         if pretrained_name_or_path is None:
             raise ValueError("pretrained_name_or_path is required")
 
+        if cls._is_local_peft_adapter(pretrained_name_or_path):
+            return cls._from_peft_adapter(
+                pretrained_name_or_path,
+                config=config,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                token=token,
+                cache_dir=cache_dir,
+                local_files_only=local_files_only,
+                revision=revision,
+                **kwargs,
+            )
+
         # Use provided config if available, otherwise create default config
         if config is None:
             config = PreTrainedConfig.from_pretrained(
@@ -1027,81 +1300,25 @@ class PI05Policy(PreTrainedPolicy):
         # Check if dataset_stats were provided in kwargs
         model = cls(config, **kwargs)
 
-        # Load state dict (expects keys with "model." prefix)
         try:
             print(f"Loading model from: {pretrained_name_or_path}")
-            try:
-                from transformers.utils import cached_file
-
-                resolved_file = cached_file(
-                    pretrained_name_or_path,
-                    "model.safetensors",
-                    cache_dir=kwargs.get("cache_dir"),
-                    force_download=kwargs.get("force_download", False),
-                    resume_download=kwargs.get("resume_download"),
-                    proxies=kwargs.get("proxies"),
-                    token=kwargs.get("token"),
-                    revision=kwargs.get("revision"),
-                    local_files_only=kwargs.get("local_files_only", False),
-                )
-                from safetensors.torch import load_file
-
-                original_state_dict = load_file(resolved_file)
-                print("✓ Loaded state dict from model.safetensors")
-            except Exception as e:
-                print(f"Could not load state dict from remote files: {e}")
-                print("Returning model without loading pretrained weights")
-                return model
-
-            # First, fix any key differences (see openpi model.py, _fix_pytorch_state_dict_keys)
-            fixed_state_dict = model._fix_pytorch_state_dict_keys(original_state_dict, model.config)
-
-            # Then add "model." prefix for all keys that don't already have it
-            remapped_state_dict = {}
-            remap_count = 0
-
-            for key, value in fixed_state_dict.items():
-                if not key.startswith("model."):
-                    new_key = f"model.{key}"
-                    remapped_state_dict[new_key] = value
-                    remap_count += 1
-                else:
-                    remapped_state_dict[key] = value
-
-            if remap_count > 0:
-                print(f"Remapped {remap_count} state dict keys")
-
-            # Tactile encoders are fork-local heads. They will be randomly initialized when adapting
-            # an upstream PI0.5 checkpoint to a tactile dataset, so do not make them block loading.
-            load_strict = strict and not bool(config.tactile_features)
-            missing_keys, unexpected_keys = model.load_state_dict(remapped_state_dict, strict=load_strict)
-
-            if missing_keys:
-                print(f"Missing keys when loading state dict: {len(missing_keys)} keys")
-                if len(missing_keys) <= 5:
-                    for key in missing_keys:
-                        print(f"  - {key}")
-                else:
-                    for key in missing_keys[:5]:
-                        print(f"  - {key}")
-                    print(f"  ... and {len(missing_keys) - 5} more")
-
-            if unexpected_keys:
-                print(f"Unexpected keys when loading state dict: {len(unexpected_keys)} keys")
-                if len(unexpected_keys) <= 5:
-                    for key in unexpected_keys:
-                        print(f"  - {key}")
-                else:
-                    for key in unexpected_keys[:5]:
-                        print(f"  - {key}")
-                    print(f"  ... and {len(unexpected_keys) - 5} more")
-
-            if not missing_keys and not unexpected_keys:
-                print("All keys loaded successfully!")
+            model._load_model_safetensors(
+                pretrained_name_or_path,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                token=token,
+                revision=revision,
+                local_files_only=local_files_only,
+                strict=strict,
+            )
 
         except Exception as e:
             print(f"Warning: Could not load state dict: {e}")
 
+        model.to(config.device)
+        model.eval()
         return model
 
     def _fix_pytorch_state_dict_keys(
@@ -1277,9 +1494,9 @@ class PI05Policy(PreTrainedPolicy):
                 tactile = torch.zeros((batch_size, *feature.shape), dtype=torch.float32, device=device)
                 mask = torch.zeros(batch_size, dtype=torch.bool, device=device)
 
-            if tactile.dim() == 5:
-                tactile = tactile[:, -1]
-            elif len(feature.shape) == 2 and tactile.dim() == 4 and tactile.shape[1] != 1:
+            if tactile.dim() == 5 or (
+                len(feature.shape) == 2 and tactile.dim() == 4 and tactile.shape[1] != 1
+            ):
                 tactile = tactile[:, -1]
 
             tactile_maps.append(tactile)
@@ -1375,6 +1592,8 @@ class PI05Policy(PreTrainedPolicy):
         loss_dict = {
             "loss_per_dim": losses.mean(dim=[0, 1]).detach().cpu().numpy().tolist(),
         }
+        if self.model.last_tactile_gate is not None:
+            loss_dict["tactile_gate_mean"] = float(self.model.last_tactile_gate.mean().item())
 
         if reduction == "none":
             # Return per-sample losses (B,) by averaging over time and action dims
@@ -1394,9 +1613,14 @@ class PI05Policy(PreTrainedPolicy):
         )
         target_modules = rf"(.*\.gemma_expert\..*\.self_attn\.(q|v)_proj|model\.({common_projections}))"
         modules_to_save = []
-        if self.config.tactile_features:
+        if self.config.tactile_features and self.config.tactile_injection_mode == "prefix":
             target_modules = rf"({target_modules}|model\.tactile_encoders\..*)"
-            modules_to_save.append("model.tactile_encoders")
+            modules_to_save.extend(
+                f"model.tactile_encoders.{idx}" for idx in range(len(self.config.tactile_features))
+            )
+        if self.config.tactile_features and self.config.tactile_injection_mode == "action_gated":
+            target_modules = rf"({target_modules}|model\.action_tactile_encoder\..*)"
+            modules_to_save.append("model.action_tactile_encoder")
         return {
             "target_modules": target_modules,
             "modules_to_save": modules_to_save,

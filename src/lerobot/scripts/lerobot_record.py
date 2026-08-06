@@ -72,9 +72,11 @@ from dataclasses import asdict, dataclass
 from pprint import pformat
 
 from lerobot.cameras import CameraConfig  # noqa: F401
+from lerobot.cameras.avfoundation import AVFoundationCameraConfig  # noqa: F401
 from lerobot.cameras.opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.reachy2_camera import Reachy2CameraConfig  # noqa: F401
 from lerobot.cameras.realsense import RealSenseCameraConfig  # noqa: F401
+from lerobot.cameras.webrtc import WebRTCCameraConfig  # noqa: F401
 from lerobot.cameras.zmq import ZMQCameraConfig  # noqa: F401
 from lerobot.common.control_utils import (
     init_keyboard_listener,
@@ -407,7 +409,8 @@ def record(
                     "Dataset names starting with 'eval_' are reserved for policy evaluation. "
                     "lerobot-record is for data collection only. Use lerobot-rollout for policy deployment."
                 )
-            cfg.dataset.stamp_repo_id()
+            if cfg.dataset.stamp_repo_id_on_create:
+                cfg.dataset.stamp_repo_id()
             dataset = LeRobotDataset.create(
                 cfg.dataset.repo_id,
                 cfg.dataset.fps,

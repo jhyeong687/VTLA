@@ -35,6 +35,8 @@ class DatasetRecordConfig:
     reset_time_s: int | float = 60
     # Number of episodes to record.
     num_episodes: int = 50
+    # Append a timestamp to repo_id when creating a new dataset.
+    stamp_repo_id_on_create: bool = True
     # Encode frames in the dataset into video
     video: bool = True
     # Upload dataset to Hugging Face hub.

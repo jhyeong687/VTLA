@@ -71,6 +71,8 @@ class PI05Config(PreTrainedConfig):
     tactile_encoder_type: str = "cnn"
     tactile_n_tokens: int = 1
     tactile_dropout: float = 0.3
+    tactile_injection_mode: str = "prefix"  # Options: "prefix", "action_gated", "none"
+    tactile_contact_threshold: float = 0.05
 
     tokenizer_max_length: int = 200  # see openpi `__post_init__`
 
@@ -127,14 +129,24 @@ class PI05Config(PreTrainedConfig):
         if self.dtype not in ["bfloat16", "float32"]:
             raise ValueError(f"Invalid dtype: {self.dtype}")
 
-        if self.tactile_encoder_type not in ["cnn", "attention"]:
+        if self.tactile_encoder_type not in ["cnn", "attention", "dual_paxini_3d"]:
             raise ValueError(f"Invalid tactile_encoder_type: {self.tactile_encoder_type}")
 
         if self.tactile_n_tokens < 1:
             raise ValueError(f"tactile_n_tokens must be >= 1, got {self.tactile_n_tokens}")
 
+        if self.tactile_injection_mode not in ["prefix", "action_gated", "none"]:
+            raise ValueError(f"Invalid tactile_injection_mode: {self.tactile_injection_mode}")
+
     def validate_features(self) -> None:
         """Validate and set up input/output features."""
+        if self.tactile_injection_mode == "none":
+            self.input_features = {
+                key: feature
+                for key, feature in self.input_features.items()
+                if feature.type is not FeatureType.TACTILE
+            }
+
         for i in range(self.empty_cameras):
             key = OBS_IMAGES + f".empty_camera_{i}"
             empty_camera = PolicyFeature(

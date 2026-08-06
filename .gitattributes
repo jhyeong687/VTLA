@@ -12,3 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 *.json !text !filter !merge !diff
+
+# Test fixtures are stored with Git LFS so GitHub Actions receives the real
+# binary files instead of the small pointer documents.
+tests/artifacts/**/*.png filter=lfs diff=lfs merge=lfs -text
+tests/artifacts/**/*.bag filter=lfs diff=lfs merge=lfs -text
+tests/artifacts/**/*.safetensors filter=lfs diff=lfs merge=lfs -text

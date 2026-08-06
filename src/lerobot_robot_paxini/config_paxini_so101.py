@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from lerobot.robots import RobotConfig
 from lerobot.robots.so_follower.config_so_follower import SOFollowerConfig
 
+from .paxini_reader import TaxelValueMode
+
 
 @RobotConfig.register_subclass("paxini_so101_follower")
 @dataclass
@@ -13,7 +15,7 @@ class PaxiniSO101FollowerConfig(RobotConfig, SOFollowerConfig):
     tactile_baudrate: int = 921600
     tactile_timeout_s: float = 0.5
     tactile_taxel_scale: float = 0.1
-    tactile_taxel_value_mode: str = "z"
+    tactile_taxel_value_mode: TaxelValueMode = "z"
     tactile_skip_bytes: int = 0
     tactile_async_read: bool = True
     tactile_map_path: str | None = None

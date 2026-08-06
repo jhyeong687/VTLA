@@ -38,8 +38,10 @@ import numpy as np
 from PIL import Image
 
 from lerobot.cameras import ColorMode
+from lerobot.cameras.avfoundation import AVFoundationCamera, AVFoundationCameraConfig
 from lerobot.cameras.opencv import OpenCVCamera, OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCamera, RealSenseCameraConfig
+from lerobot.cameras.webrtc import WebRTCCamera, WebRTCCameraConfig
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +88,40 @@ def find_all_realsense_cameras() -> list[dict[str, Any]]:
     return all_realsense_cameras_info
 
 
+def find_all_webrtc_cameras() -> list[dict[str, Any]]:
+    """
+    WebRTC/WHEP cameras require manual WHEP URL configuration.
+    """
+    logger.info("WebRTC cameras are configured manually with a WHEP URL.")
+    return WebRTCCamera.find_cameras()
+
+
+def find_all_avfoundation_cameras() -> list[dict[str, Any]]:
+    """
+    Finds all available native AVFoundation cameras plugged into macOS.
+
+    Returns:
+        A list of all available AVFoundation cameras with their metadata.
+    """
+    all_avfoundation_cameras_info: list[dict[str, Any]] = []
+    logger.info("Searching for AVFoundation cameras...")
+    try:
+        avfoundation_cameras = AVFoundationCamera.find_cameras()
+        for cam_info in avfoundation_cameras:
+            all_avfoundation_cameras_info.append(cam_info)
+        logger.info(f"Found {len(avfoundation_cameras)} AVFoundation cameras.")
+    except Exception as e:
+        logger.error(f"Error finding AVFoundation cameras: {e}")
+
+    return all_avfoundation_cameras_info
+
+
 def find_and_print_cameras(camera_type_filter: str | None = None) -> list[dict[str, Any]]:
     """
     Finds available cameras based on an optional filter and prints their information.
 
     Args:
-        camera_type_filter: Optional string to filter cameras ("realsense" or "opencv").
+        camera_type_filter: Optional string to filter cameras ("realsense", "opencv", "avfoundation", or "webrtc").
                             If None, lists all cameras.
 
     Returns:
@@ -104,14 +134,18 @@ def find_and_print_cameras(camera_type_filter: str | None = None) -> list[dict[s
 
     if camera_type_filter is None or camera_type_filter == "opencv":
         all_cameras_info.extend(find_all_opencv_cameras())
+    if camera_type_filter is None or camera_type_filter == "avfoundation":
+        all_cameras_info.extend(find_all_avfoundation_cameras())
     if camera_type_filter is None or camera_type_filter == "realsense":
         all_cameras_info.extend(find_all_realsense_cameras())
+    if camera_type_filter is None or camera_type_filter == "webrtc":
+        all_cameras_info.extend(find_all_webrtc_cameras())
 
     if not all_cameras_info:
         if camera_type_filter:
             logger.warning(f"No {camera_type_filter} cameras were detected.")
         else:
-            logger.warning("No cameras (OpenCV or RealSense) were detected.")
+            logger.warning("No cameras were detected.")
     else:
         print("\n--- Detected Cameras ---")
         for i, cam_info in enumerate(all_cameras_info):
@@ -166,12 +200,24 @@ def create_camera_instance(cam_meta: dict[str, Any]) -> dict[str, Any] | None:
                 color_mode=ColorMode.RGB,
             )
             instance = OpenCVCamera(cv_config)
+        elif cam_type == "AVFoundation":
+            av_config = AVFoundationCameraConfig(
+                device_id=cam_id,
+                color_mode=ColorMode.RGB,
+            )
+            instance = AVFoundationCamera(av_config)
         elif cam_type == "RealSense":
             rs_config = RealSenseCameraConfig(
                 serial_number_or_name=cam_id,
                 color_mode=ColorMode.RGB,
             )
             instance = RealSenseCamera(rs_config)
+        elif cam_type == "WebRTC":
+            rtc_config = WebRTCCameraConfig(
+                whep_url=cam_id,
+                color_mode=ColorMode.RGB,
+            )
+            instance = WebRTCCamera(rtc_config)
         else:
             logger.warning(f"Unknown camera type: {cam_type} for ID {cam_id}. Skipping.")
             return None
@@ -237,7 +283,7 @@ def save_images_from_all_cameras(
     Args:
         output_dir: Directory to save images.
         record_time_s: Duration in seconds to record images.
-        camera_type: Optional string to filter cameras ("realsense" or "opencv").
+        camera_type: Optional string to filter cameras ("realsense", "opencv", "avfoundation", or "webrtc").
                             If None, uses all detected cameras.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -294,8 +340,11 @@ def main():
         type=str,
         nargs="?",
         default=None,
-        choices=["realsense", "opencv"],
-        help="Specify camera type to capture from (e.g., 'realsense', 'opencv'). Captures from all if omitted.",
+        choices=["realsense", "opencv", "avfoundation", "webrtc"],
+        help=(
+            "Specify camera type to capture from (e.g., 'realsense', 'opencv', 'avfoundation', 'webrtc'). "
+            "Captures from all if omitted."
+        ),
     )
     parser.add_argument(
         "--output-dir",

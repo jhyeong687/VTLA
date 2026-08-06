@@ -45,8 +45,68 @@ from .configuration_opencv import ColorMode, OpenCVCameraConfig
 # When you change the USB port or reboot the computer, the operating system might
 # treat the same cameras as new devices. Thus we select a higher bound to search indices.
 MAX_OPENCV_INDEX = 60
+AVFOUNDATION_SETTLE_S = 3.0
+AVFOUNDATION_SETTLE_FRAME_READS = 5
 
 logger = logging.getLogger(__name__)
+
+
+def _list_avfoundation_video_devices() -> list[dict[str, Any]]:
+    """Return macOS AVFoundation video devices in the order OpenCV indexes them."""
+
+    if platform.system() != "Darwin":
+        return []
+
+    try:
+        import AVFoundation  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise RuntimeError(
+            "Native AVFoundation camera lookup requires pyobjc-framework-avfoundation. "
+            "Install it with `uv sync` after updating the lockfile."
+        ) from e
+
+    devices: list[dict[str, Any]] = []
+    for index, device in enumerate(
+        AVFoundation.AVCaptureDevice.devicesWithMediaType_(AVFoundation.AVMediaTypeVideo)
+    ):
+        devices.append(
+            {
+                "index": index,
+                "name": str(device.localizedName()),
+                "unique_id": str(device.uniqueID()),
+            }
+        )
+
+    return devices
+
+
+def _resolve_avfoundation_device_name(identifier: str) -> dict[str, Any]:
+    devices = _list_avfoundation_video_devices()
+    snapshot = ", ".join(f"{device['index']}: {device['name']} ({device['unique_id']})" for device in devices)
+    logger.info("AVFoundation devices: %s", snapshot or "none")
+
+    unique_id_matches = [device for device in devices if device["unique_id"] == identifier]
+    if len(unique_id_matches) == 1:
+        return unique_id_matches[0]
+
+    name_matches = [device for device in devices if device["name"] == identifier]
+    if len(name_matches) == 1:
+        return name_matches[0]
+
+    if len(name_matches) > 1:
+        matches = ", ".join(
+            f"index={device['index']} unique_id='{device['unique_id']}'" for device in name_matches
+        )
+        raise ConnectionError(
+            f"AVFoundation video device name '{identifier}' is ambiguous; matches: {matches}. "
+            "Configure index_or_path with the device unique_id instead."
+        )
+
+    available = ", ".join(f"{device['name']} ({device['unique_id']})" for device in devices) or "none"
+    raise ConnectionError(
+        f"AVFoundation video device '{identifier}' was not found by name or unique_id. "
+        f"Available devices: {available}."
+    )
 
 
 class OpenCVCamera(Camera):
@@ -57,10 +117,11 @@ class OpenCVCamera(Camera):
     frames from cameras compatible with OpenCV's VideoCapture. It supports both
     synchronous and asynchronous frame reading.
 
-    An OpenCVCamera instance requires a camera index (e.g., 0) or a device path
-    (e.g., '/dev/video0' on Linux). Camera indices can be unstable across reboots
-    or port changes, especially on Linux. Use the provided utility script to find
-    available camera indices or paths:
+    An OpenCVCamera instance requires a camera index (e.g., 0), a device path
+    (e.g., '/dev/video0' on Linux), or an AVFoundation video device name on
+    macOS (e.g., 'FaceTime HD Camera'). Camera indices can be unstable across
+    reboots or port changes. Use the provided utility script to find available
+    camera identifiers:
     ```bash
     lerobot-find-cameras opencv
     ```
@@ -119,6 +180,13 @@ class OpenCVCamera(Camera):
 
         self.rotation: int | None = get_cv2_rotation(config.rotation)
         self.backend: int = config.backend
+        self._avfoundation_device_name: str | None = None
+        self._avfoundation_resolved_device_name: str | None = None
+        self._avfoundation_transient_index: int | None = None
+        self._opened_with_params = False
+        if self._should_resolve_avfoundation_name(config.index_or_path):
+            self._avfoundation_device_name = str(config.index_or_path)
+            self.backend = cv2.CAP_AVFOUNDATION
 
         if self.height and self.width:
             self.capture_width, self.capture_height = self.width, self.height
@@ -127,6 +195,69 @@ class OpenCVCamera(Camera):
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}({self.index_or_path})"
+
+    def _context(self) -> str:
+        context = str(self)
+        if self.camera_key is not None:
+            context += f" camera_key='{self.camera_key}'"
+        if self._avfoundation_device_name is not None:
+            context += f" configured_avfoundation_name='{self._avfoundation_device_name}'"
+        if self._avfoundation_resolved_device_name is not None:
+            context += f" resolved_avfoundation_name='{self._avfoundation_resolved_device_name}'"
+        if self._avfoundation_transient_index is not None:
+            context += f" transient_avfoundation_index={self._avfoundation_transient_index}"
+        return context
+
+    @staticmethod
+    def _should_resolve_avfoundation_name(index_or_path: int | str | Path) -> bool:
+        return (
+            platform.system() == "Darwin"
+            and isinstance(index_or_path, str)
+            and not Path(index_or_path).exists()
+        )
+
+    def _make_avfoundation_open_params(self) -> list[int]:
+        params: list[int] = []
+
+        capture_width = getattr(self, "capture_width", None)
+        capture_height = getattr(self, "capture_height", None)
+
+        if capture_width is not None:
+            params.extend([cv2.CAP_PROP_FRAME_WIDTH, int(self.capture_width)])
+        if capture_height is not None:
+            params.extend([cv2.CAP_PROP_FRAME_HEIGHT, int(self.capture_height)])
+        if self.fps is not None:
+            params.extend([cv2.CAP_PROP_FPS, int(self.fps)])
+        if self.config.fourcc is not None:
+            params.extend([cv2.CAP_PROP_FOURCC, int(cv2.VideoWriter_fourcc(*self.config.fourcc))])
+
+        return params
+
+    def _settle_avfoundation_capture(self) -> None:
+        if self.videocapture is None:
+            raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
+
+        logger.info(
+            "%sWaiting %.1fs for AVFoundation camera to settle.",
+            self._context(),
+            AVFOUNDATION_SETTLE_S,
+        )
+        time.sleep(AVFOUNDATION_SETTLE_S)
+
+        read_successes = 0
+        for _ in range(AVFOUNDATION_SETTLE_FRAME_READS):
+            ret, _frame = self.videocapture.read()
+            if ret:
+                read_successes += 1
+            time.sleep(0.05)
+
+        if read_successes < AVFOUNDATION_SETTLE_FRAME_READS:
+            logger.warning(
+                "%sOnly drained %s/%s AVFoundation settle frames.",
+                self._context(),
+                read_successes,
+                AVFOUNDATION_SETTLE_FRAME_READS,
+            )
 
     @property
     def is_connected(self) -> bool:
@@ -155,7 +286,38 @@ class OpenCVCamera(Camera):
         # blocking in multi-threaded applications, especially during data collection.
         cv2.setNumThreads(1)
 
-        self.videocapture = cv2.VideoCapture(self.index_or_path, self.backend)
+        target = self.index_or_path
+        camera_key = f"Camera '{self.camera_key}': " if self.camera_key is not None else ""
+        if self._avfoundation_device_name is not None:
+            device = _resolve_avfoundation_device_name(self._avfoundation_device_name)
+            target = int(device["index"])
+            self.index_or_path = target
+            self._avfoundation_resolved_device_name = str(device["name"])
+            self._avfoundation_transient_index = target
+            logger.info(
+                "%sAVFoundation resolved '%s' to '%s' unique_id='%s' at transient open index %s.",
+                camera_key,
+                self._avfoundation_device_name,
+                device["name"],
+                device["unique_id"],
+                target,
+            )
+
+        open_params = []
+        if self._avfoundation_device_name is not None:
+            open_params = self._make_avfoundation_open_params()
+            if open_params:
+                logger.info(
+                    "%sOpening AVFoundation camera with requested profile params: %s.",
+                    camera_key,
+                    open_params,
+                )
+
+        if open_params:
+            self.videocapture = cv2.VideoCapture(target, self.backend, open_params)
+            self._opened_with_params = True
+        else:
+            self.videocapture = cv2.VideoCapture(target, self.backend)
 
         if not self.videocapture.isOpened():
             self.videocapture.release()
@@ -163,6 +325,9 @@ class OpenCVCamera(Camera):
             raise ConnectionError(
                 f"Failed to open {self}.Run `lerobot-find-cameras opencv` to find available cameras."
             )
+
+        if self._avfoundation_device_name is not None:
+            self._settle_avfoundation_capture()
 
         self._configure_capture_settings()
         self._start_read_thread()
@@ -200,7 +365,7 @@ class OpenCVCamera(Camera):
         """
 
         # Set FOURCC first (if specified) as it can affect available FPS/resolution options
-        if self.config.fourcc is not None:
+        if self.config.fourcc is not None and not self._opened_with_params:
             self._validate_fourcc()
         if self.videocapture is None:
             raise DeviceNotConnectedError(f"{self} videocapture is not initialized")
@@ -231,7 +396,9 @@ class OpenCVCamera(Camera):
         if self.fps is None:
             raise ValueError(f"{self} FPS is not set")
 
-        success = self.videocapture.set(cv2.CAP_PROP_FPS, float(self.fps))
+        success = True
+        if not self._opened_with_params:
+            success = self.videocapture.set(cv2.CAP_PROP_FPS, float(self.fps))
         actual_fps = self.videocapture.get(cv2.CAP_PROP_FPS)
         # Use math.isclose for robust float comparison
         if not success or not math.isclose(self.fps, actual_fps, rel_tol=1e-3):
@@ -267,19 +434,24 @@ class OpenCVCamera(Camera):
         if self.capture_width is None or self.capture_height is None:
             raise ValueError(f"{self} capture_width or capture_height is not set")
 
-        width_success = self.videocapture.set(cv2.CAP_PROP_FRAME_WIDTH, float(self.capture_width))
-        height_success = self.videocapture.set(cv2.CAP_PROP_FRAME_HEIGHT, float(self.capture_height))
+        width_success = True
+        height_success = True
+        if not self._opened_with_params:
+            width_success = self.videocapture.set(cv2.CAP_PROP_FRAME_WIDTH, float(self.capture_width))
+            height_success = self.videocapture.set(cv2.CAP_PROP_FRAME_HEIGHT, float(self.capture_height))
 
         actual_width = int(round(self.videocapture.get(cv2.CAP_PROP_FRAME_WIDTH)))
         if not width_success or self.capture_width != actual_width:
             raise RuntimeError(
-                f"{self} failed to set capture_width={self.capture_width} ({actual_width=}, {width_success=})."
+                f"{self._context()} failed to set capture_width={self.capture_width} "
+                f"({actual_width=}, {width_success=}, configured_height={self.capture_height}, fps={self.fps})."
             )
 
         actual_height = int(round(self.videocapture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
         if not height_success or self.capture_height != actual_height:
             raise RuntimeError(
-                f"{self} failed to set capture_height={self.capture_height} ({actual_height=}, {height_success=})."
+                f"{self._context()} failed to set capture_height={self.capture_height} "
+                f"({actual_height=}, {height_success=}, configured_width={self.capture_width}, fps={self.fps})."
             )
 
     @staticmethod
@@ -304,6 +476,12 @@ class OpenCVCamera(Camera):
         else:
             targets_to_scan = [int(i) for i in range(MAX_OPENCV_INDEX)]
 
+        avfoundation_devices = {}
+        if platform.system() == "Darwin":
+            avfoundation_devices = {
+                device["index"]: device["name"] for device in _list_avfoundation_video_devices()
+            }
+
         for target in targets_to_scan:
             camera = cv2.VideoCapture(target)
             if camera.isOpened():
@@ -318,7 +496,7 @@ class OpenCVCamera(Camera):
                 default_fourcc = "".join([chr((default_fourcc_code_int >> 8 * i) & 0xFF) for i in range(4)])
 
                 camera_info = {
-                    "name": f"OpenCV Camera @ {target}",
+                    "name": avfoundation_devices.get(target, f"OpenCV Camera @ {target}"),
                     "type": "OpenCV",
                     "id": target,
                     "backend_api": camera.getBackendName(),
@@ -410,7 +588,8 @@ class OpenCVCamera(Camera):
 
         if h != self.capture_height or w != self.capture_width:
             raise RuntimeError(
-                f"{self} frame width={w} or height={h} do not match configured width={self.capture_width} or height={self.capture_height}."
+                f"{self._context()} frame width={w} or height={h} do not match configured "
+                f"width={self.capture_width} or height={self.capture_height}."
             )
 
         if c != 3:
