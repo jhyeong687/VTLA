@@ -224,7 +224,7 @@ ax.text(
     4,
     inset_y + 2.0,
     "A0  none  —  no tactile (baseline)        "
-    "A15  prefix  —  TactileTokenEncoder $\\rightarrow$ prefix tokens into PaliGemma        "
+    "A1.5  prefix  —  TactileTokenEncoder $\\rightarrow$ prefix tokens into PaliGemma       "
     "A2  action_gated  —  ActionSideGatedTactileEncoder $\\rightarrow$ gates the action expert",
     ha="left",
     va="center",

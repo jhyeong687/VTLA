@@ -36,7 +36,7 @@ dataset feature:
 ## 방법
 
 - `A0`: no tactile baseline, `policy.tactile_injection_mode=none`
-- `A15`: CNN tactile prefix token, `policy.tactile_injection_mode=prefix`
+- `A1.5`: CNN tactile prefix token, `policy.tactile_injection_mode=prefix`
 - `A2`: gated action-side tactile tokens, `policy.tactile_injection_mode=action_gated`
 
 공통 설정:
@@ -63,7 +63,7 @@ bash experiments/pi05_cup_left/scripts/preflight_pi05.sh
 
 ```bash
 bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A0 1
-bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A15 1
+bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A1.5 1
 bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A2 1
 ```
 
@@ -75,7 +75,7 @@ bash experiments/pi05_cup_left/scripts/queue_smoke.sh 10
 
 ## 학습
 
-A0, A15, A2를 순서대로 실행합니다.
+A0, A1.5, A2를 순서대로 실행합니다.
 
 ```bash
 BATCH_SIZE=8 NUM_WORKERS=4 PERSISTENT_WORKERS=true PREFETCH_FACTOR=2 \
@@ -105,7 +105,7 @@ tokenizer, 이 코드 revision이 필요합니다.
 
 ```bash
 /workspace/vtla/outputs/pi05_cup_left/A0_no_tactile_4000steps_*/checkpoints/020000/pretrained_model
-/workspace/vtla/outputs/pi05_cup_left/A15_cnn_tactile_prefix_4000steps_*/checkpoints/020000/pretrained_model
+/workspace/vtla/outputs/pi05_cup_left/A1.5_cnn_tactile_prefix_4000steps_*/checkpoints/020000/pretrained_model
 /workspace/vtla/outputs/pi05_cup_left/A2_gated_action_tactile_4000steps_*/checkpoints/020000/pretrained_model
 ```
 
@@ -134,6 +134,6 @@ lerobot-rollout \
   --fps=30
 ```
 
-주의: A15/A2는 `paxini_so101_follower`가 중요합니다. 이 wrapper가
+주의: A1.5/A2는 `paxini_so101_follower`가 중요합니다. 이 wrapper가
 `observation.tactile.primary`를 `(2, 9, 9)`로 내보내며, adapter도 그 shape에
 맞춰 학습되었습니다.

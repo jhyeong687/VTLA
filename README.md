@@ -39,7 +39,7 @@
 | Tactile    | 154 taxel을 `(2, 9, 9)` `float32` 맵으로 저장        |
 | Policy     | pi0.5 tactile prefix 및 action-gated injection       |
 | Cameras    | macOS AVFoundation 및 원격 WebRTC 입력               |
-| Training   | A0 / A15 / A2 PEFT-LoRA 실험 하네스                  |
+| Training   | A0 / A1.5 / A2 PEFT-LoRA 실험 하네스                 |
 | Evaluation | 로봇 실행 전 offline action comparison과 진단 그래프 |
 
 ## Demo
@@ -106,15 +106,15 @@ VTLA의 그리퍼에는 **Paxini GEN3 M3025 계열 분포형 촉각 센서 2개*
   <img src="./media/readme/vtla/demoday_architecture.jpg" alt="pi0.5 and Paxini tactile architecture" width="100%">
 </p>
 
-<p align="center"><sub>Vision · language · tactile map · robot state → pi0.5 → 50-step action chunk. 슬라이드의 A1.5 표기는 저장소 실험명 A15에 해당합니다.</sub></p>
+<p align="center"><sub>Vision · language · tactile map · robot state → pi0.5 → 50-step action chunk.</sub></p>
 
 VTLA는 세 가지 촉각 주입 방식을 같은 데이터와 학습 조건에서 비교합니다.
 
-| Variant | Tactile injection | Description                                                |
-| ------- | ----------------- | ---------------------------------------------------------- |
-| **A0**  | `none`            | 촉각을 사용하지 않는 vision-language-action baseline       |
-| **A15** | `prefix`          | CNN tactile encoder 출력을 PaliGemma prefix token으로 삽입 |
-| **A2**  | `action_gated`    | 접촉 통계로 Gemma action expert의 conditioning을 gating    |
+| Variant  | Tactile injection | Description                                                |
+| -------- | ----------------- | ---------------------------------------------------------- |
+| **A0**   | `none`            | 촉각을 사용하지 않는 vision-language-action baseline       |
+| **A1.5** | `prefix`          | CNN tactile encoder 출력을 PaliGemma prefix token으로 삽입 |
+| **A2**   | `action_gated`    | 접촉 통계로 Gemma action expert의 conditioning을 gating    |
 
 <details>
 <summary><strong>Detailed model architecture</strong></summary>
@@ -171,24 +171,24 @@ action                       float32 [6]
 실제 로봇에 action을 보내기 전에, 녹화된 episode 0의 408개 frame에서 pi0.5 예측과 demonstration action을 비교했습니다.
 
 <p align="center">
-  <img src="./media/readme/vtla/offline_eval_summary.png" alt="A0 A15 A2 offline evaluation summary" width="100%">
+  <img src="./media/readme/vtla/offline_eval_summary.png" alt="A0 A1.5 A2 offline evaluation summary" width="100%">
 </p>
 
-| Model                    | First-action MAE ↓ | Chunk MAE ↓ | Direction agreement ↑ | Mean inference |
-| ------------------------ | -----------------: | ----------: | --------------------: | -------------: |
-| A0 · no tactile          |              8.832 |       9.094 |                55.22% |        0.191 s |
-| **A15 · tactile prefix** |          **7.847** |   **8.420** |            **56.52%** |        0.203 s |
-| A2 · action-gated        |              8.355 |       8.915 |                55.18% |        0.198 s |
+| Model                     | First-action MAE ↓ | Chunk MAE ↓ | Direction agreement ↑ | Mean inference |
+| ------------------------- | -----------------: | ----------: | --------------------: | -------------: |
+| A0 · no tactile           |              8.832 |       9.094 |                55.22% |        0.191 s |
+| **A1.5 · tactile prefix** |          **7.847** |   **8.420** |            **56.52%** |        0.203 s |
+| A2 · action-gated         |              8.355 |       8.915 |                55.18% |        0.198 s |
 
-이 단일 episode의 예비 결과에서는 **A15 tactile prefix**가 가장 낮은 action error를 기록했습니다. 이는 제한된 offline 비교이며, 실제 rollout 성공률이나 일반화 성능을 의미하지 않습니다.
+이 단일 episode의 예비 결과에서는 **A1.5 tactile prefix**가 가장 낮은 action error를 기록했습니다. 이는 제한된 offline 비교이며, 실제 rollout 성공률이나 일반화 성능을 의미하지 않습니다.
 
 <details>
-<summary><strong>View A15 joint-wise prediction traces</strong></summary>
+<summary><strong>View A1.5 joint-wise prediction traces</strong></summary>
 
 <br>
 
 <p align="center">
-  <img src="./media/readme/vtla/a15_action_comparison.jpg" alt="A15 demonstrated versus predicted first actions" width="900">
+  <img src="./media/readme/vtla/a1_5_action_comparison.jpg" alt="A1.5 demonstrated versus predicted first actions" width="900">
 </p>
 
 </details>
@@ -201,7 +201,7 @@ VTLA/
 ├── src/lerobot/policies/
 │   ├── tactile/                # Reusable tactile token encoders
 │   └── pi05/                   # pi0.5 tactile integration
-├── experiments/pi05_cup_left/ # A0 / A15 / A2 PEFT experiment harness
+├── experiments/pi05_cup_left/ # A0 / A1.5 / A2 PEFT experiment harness
 ├── user_scripts/               # Server, client, offline evaluation entrypoints
 ├── local_scripts/              # Recording and dataset utility scripts
 └── docs/tactile_pi05/          # Architecture, rollout, and handoff guides
@@ -235,7 +235,7 @@ lerobot-info
 
 # One-step experiment smoke tests
 bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A0 1
-bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A15 1
+bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A1.5 1
 bash experiments/pi05_cup_left/scripts/run_pi05_experiment.sh A2 1
 ```
 
@@ -258,7 +258,7 @@ EPISODE=0 STRIDE=1 MAX_FRAMES=0 \
 - [pi0.5 + Paxini rollout guide](./docs/tactile_pi05/README.md)
 - [Architecture reference](./docs/tactile_pi05/ARCHITECTURE.md)
 - [Offline evaluation handoff](./docs/tactile_pi05/OFFLINE_EVAL_HANDOFF.md)
-- [A0 / A15 / A2 training experiments](./experiments/pi05_cup_left/README.md)
+- [A0 / A1.5 / A2 training experiments](./experiments/pi05_cup_left/README.md)
 - [Paxini + pi0.5 Korean guide](./src/lerobot_robot_paxini/PAXINI_PI05_GUIDE.ko.md)
 
 ## Project status

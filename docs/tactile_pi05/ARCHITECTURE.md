@@ -45,7 +45,7 @@ Paxini 촉각 센서가 붙은 SO-101 로봇에서 데이터를 얻고, pi0.5 po
 │                                                                       │
 │    촉각 주입 모드 3가지 (config.tactile_injection_mode):              │
 │      A0  "none"         → 촉각 미사용 (baseline)                      │
-│      A15 "prefix"       → TactileTokenEncoder → prefix 토큰으로 삽입  │
+│      A1.5 "prefix"      → TactileTokenEncoder → prefix 토큰으로 삽입  │
 │      A2  "action_gated" → ActionSideGatedTactileEncoder → expert gate │
 └───────────────────────────────┬─────────────────────────────────────┘
                                  │
@@ -96,7 +96,7 @@ policy 간 재사용 가능한 촉각 backbone. 입력 `(C,H,W)` → 토큰 임�
 **촉각 주입 모드 상세**
 
 - **A0 `none`**: 촉각 feature 미사용. `TACTILE` feature는 config에서 필터링.
-- **A15 `prefix`**: `TactileTokenEncoder`가 `(2,9,9)`를 PaliGemma width 차원의 토큰으로 인코딩 → language prompt 임베딩 앞에 prefix로 삽입. `config.tactile_features` 각각에 대해 인코더를 `nn.ModuleList` 로 생성(L642-655).
+- **A1.5 `prefix`**: `TactileTokenEncoder`가 `(2,9,9)`를 PaliGemma width 차원의 토큰으로 인코딩 → language prompt 임베딩 앞에 prefix로 삽입. `config.tactile_features` 각각에 대해 인코더를 `nn.ModuleList` 로 생성(L642-655).
 - **A2 `action_gated`**: `ActionSideGatedTactileEncoder`(L553-609)가 9×9를 3×3 블록으로 나눠 블록별 5개 통계(mean/max/std/delta/active_ratio)와 전역 contact 통계를 뽑아 gating MLP로 action expert conditioning을 게이팅(L657-663).
 
 ### 4. 카메라 백엔드 — `src/lerobot/cameras/`
@@ -114,8 +114,8 @@ policy 간 재사용 가능한 촉각 backbone. 입력 `(C,H,W)` → 토큰 임�
 | `src/lerobot/async_inference/policy_server.py`       | gRPC 비동기 policy 추론 서버. policy + 전/후처리 로드, observation 큐 관리                                                                                      |
 | `user_scripts/server.sh`                             | base pi05 / adapter / PaliGemma tokenizer 다운로드·경로 패치, `tactile_injection_mode` ↔ MODEL_TYPE(none/cnn/gated) 검증 후 gRPC 서버(0.0.0.0:8080) 기동       |
 | `src/lerobot/scripts/lerobot_offline_action_eval.py` | 로봇 없이 녹화 에피소드에서 policy 예측 vs 시연 action 비교. chunk MAE/RMSE, 첫 action 오차, 방향 일치도, 관절별 motion jump 등 지표 계산 후 JSON/NPZ/plot 저장 |
-| `user_scripts/offline_eval.sh`                       | `server.sh`(자산 준비) 후 A0/A15/A2 3개 체크포인트로 offline eval 실행. ENV: `EPISODE`, `STRIDE`, `MAX_FRAMES`                                                  |
-| `experiments/pi05_cup_left/`                         | PEFT adapter 학습 하네스(A0/A15/A2 변형). prepare/preflight/run/queue 스크립트                                                                                  |
+| `user_scripts/offline_eval.sh`                       | `server.sh`(자산 준비) 후 A0/A1.5/A2 3개 체크포인트로 offline eval 실행. ENV: `EPISODE`, `STRIDE`, `MAX_FRAMES`                                                 |
+| `experiments/pi05_cup_left/`                         | PEFT adapter 학습 하네스(A0/A1.5/A2 변형). prepare/preflight/run/queue 스크립트                                                                                 |
 
 ## 설정 클래스 등록 관계
 
@@ -150,4 +150,4 @@ FeatureType (src/lerobot/configs/types.py:27)
 
 - `docs/tactile_pi05/README.md` — pi0.5 tactile rollout 최소 절차(한국어)
 - `src/lerobot_robot_paxini/PAXINI_PI05_GUIDE.ko.md` — Paxini + pi0.5 가이드
-- `experiments/pi05_cup_left/README.md` — A0/A15/A2 학습 하네스 가이드
+- `experiments/pi05_cup_left/README.md` — A0/A1.5/A2 학습 하네스 가이드
