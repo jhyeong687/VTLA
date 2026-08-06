@@ -47,10 +47,7 @@ def taxels_to_stacked_9x9(
 
     grid = np.zeros((sensors, 9, 9), dtype=np.float32)
     valid_positions = [
-        (row, col)
-        for row in range(9)
-        for col in range(9)
-        if not ((row in (0, 8)) and (col in (0, 8)))
+        (row, col) for row in range(9) for col in range(9) if not ((row in (0, 8)) and (col in (0, 8)))
     ]
 
     for sensor_idx in range(sensors):

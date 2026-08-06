@@ -60,15 +60,16 @@ Paxini 촉각 센서가 붙은 SO-101 로봇에서 데이터를 얻고, pi0.5 po
 
 ### 1. 촉각 하드웨어 추상화 — `src/lerobot_robot_paxini/`
 
-| 파일 | 핵심 클래스/함수 | 역할 |
-|------|------------------|------|
-| `paxini_so101.py` | `PaxiniSO101Follower` | SO-101 로봇 래퍼. 촉각 reader/renderer를 붙여 `observation.tactile.primary` 를 생성 |
-| `paxini_reader.py` | `PaxiniReader`(base), `SerialPaxiniReader`, `CsvPaxiniReader`, `MockPaxiniReader` | 실 하드웨어(921600 baud) / CSV 리플레이 / 테스트용 mock. 154 taxel 파싱 |
-| `tactile_render.py` | `TactileHeatmapRenderer`, `taxels_to_stacked_9x9()`, `TaxelMap`, `load_taxel_map_xlsx()` | taxel 좌표 → 64×64 heatmap 또는 (2,9,9) stacked grid 변환 |
-| `config_paxini_so101.py` | `PaxiniSO101FollowerConfig` | `@RobotConfig.register_subclass("paxini_so101_follower")`. `tactile_port`, `tactile_num_taxels=154`, `tactile_representation`, `tactile_image_size=64`, `tactile_taxel_value_mode="z"` |
-| `make_pi05_smoke_dataset.py` | — | smoke 테스트용 데이터셋 생성 |
+| 파일                         | 핵심 클래스/함수                                                                         | 역할                                                                                                                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paxini_so101.py`            | `PaxiniSO101Follower`                                                                    | SO-101 로봇 래퍼. 촉각 reader/renderer를 붙여 `observation.tactile.primary` 를 생성                                                                                                    |
+| `paxini_reader.py`           | `PaxiniReader`(base), `SerialPaxiniReader`, `CsvPaxiniReader`, `MockPaxiniReader`        | 실 하드웨어(921600 baud) / CSV 리플레이 / 테스트용 mock. 154 taxel 파싱                                                                                                                |
+| `tactile_render.py`          | `TactileHeatmapRenderer`, `taxels_to_stacked_9x9()`, `TaxelMap`, `load_taxel_map_xlsx()` | taxel 좌표 → 64×64 heatmap 또는 (2,9,9) stacked grid 변환                                                                                                                              |
+| `config_paxini_so101.py`     | `PaxiniSO101FollowerConfig`                                                              | `@RobotConfig.register_subclass("paxini_so101_follower")`. `tactile_port`, `tactile_num_taxels=154`, `tactile_representation`, `tactile_image_size=64`, `tactile_taxel_value_mode="z"` |
+| `make_pi05_smoke_dataset.py` | —                                                                                        | smoke 테스트용 데이터셋 생성                                                                                                                                                           |
 
 **표현(representation) 두 가지**
+
 - `"stacked_9x9"` → `(2, 9, 9)` : 두 센서(77 taxel)를 각각 9×9 그리드로, 채널 2로 stack
 - `"heatmap"` → `(64, 64)` : taxel 좌표를 픽셀 그리드에 nearest-neighbor 보간
 - 값 축(`tactile_taxel_value_mode`): `z`(수직력, 기본) / `x` / `y` / `magnitude`
@@ -77,20 +78,20 @@ Paxini 촉각 센서가 붙은 SO-101 로봇에서 데이터를 얻고, pi0.5 po
 
 policy 간 재사용 가능한 촉각 backbone. 입력 `(C,H,W)` → 토큰 임베딩.
 
-| 클래스 | 설명 |
-|--------|------|
-| `TactileCNN` | 기본 CNN backbone, 샘플당 feature vector 1개 |
-| `TactileAttentionCNN` | CNN + spatial attention |
-| `DualPaxini3DCNN` | 실험용 3D(시간축) 인코더, 5D 입력 대응 |
+| 클래스                | 설명                                                                             |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `TactileCNN`          | 기본 CNN backbone, 샘플당 feature vector 1개                                     |
+| `TactileAttentionCNN` | CNN + spatial attention                                                          |
+| `DualPaxini3DCNN`     | 실험용 3D(시간축) 인코더, 5D 입력 대응                                           |
 | `TactileTokenEncoder` | 위 backbone을 감싸 `n_tokens` 개의 토큰으로 출력하는 래퍼 (prefix 모드에서 사용) |
 
 ### 3. pi0.5 policy 통합 — `src/lerobot/policies/pi05/`
 
-| 파일 | 핵심 | 설명 |
-|------|------|------|
-| `configuration_pi05.py` | `PI05Config` | `@PreTrainedConfig.register_subclass("pi05")`. 촉각 필드: `tactile_encoder_type="cnn"`, `tactile_n_tokens=1`, `tactile_injection_mode`, `tactile_contact_threshold=0.05`, `tactile_dropout=0.3` |
-| `modeling_pi05.py` | `PI05Pytorch`, `ActionSideGatedTactileEncoder` | PaliGemma + action expert. injection 모드에 따라 인코더 초기화(L641-664) |
-| `processor_pi05.py` | `Pi05PrepareStateTokenizerProcessorStep`, `make_pi05_pre_post_processors()` | 전/후처리 파이프라인 구성 |
+| 파일                    | 핵심                                                                        | 설명                                                                                                                                                                                            |
+| ----------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `configuration_pi05.py` | `PI05Config`                                                                | `@PreTrainedConfig.register_subclass("pi05")`. 촉각 필드: `tactile_encoder_type="cnn"`, `tactile_n_tokens=1`, `tactile_injection_mode`, `tactile_contact_threshold=0.05`, `tactile_dropout=0.3` |
+| `modeling_pi05.py`      | `PI05Pytorch`, `ActionSideGatedTactileEncoder`                              | PaliGemma + action expert. injection 모드에 따라 인코더 초기화(L641-664)                                                                                                                        |
+| `processor_pi05.py`     | `Pi05PrepareStateTokenizerProcessorStep`, `make_pi05_pre_post_processors()` | 전/후처리 파이프라인 구성                                                                                                                                                                       |
 
 **촉각 주입 모드 상세**
 
@@ -100,21 +101,21 @@ policy 간 재사용 가능한 촉각 backbone. 입력 `(C,H,W)` → 토큰 임�
 
 ### 4. 카메라 백엔드 — `src/lerobot/cameras/`
 
-| 백엔드 | 파일 | 등록 이름 | 용도 |
-|--------|------|-----------|------|
-| AVFoundation | `avfoundation/camera_avfoundation.py`, `configuration_avfoundation.py` | `"avfoundation"` | macOS 네이티브 카메라(PyObjC) |
-| WebRTC | `webrtc/camera_webrtc.py`, `configuration_webrtc.py` | `"webrtc"` | WHEP/WebRTC 저지연 원격 스트림(aiortc) |
-| 기타 | `opencv/`, `realsense/`, `reachy2_camera/`, `zmq/` | — | 기존 LeRobot 백엔드 |
+| 백엔드       | 파일                                                                   | 등록 이름        | 용도                                   |
+| ------------ | ---------------------------------------------------------------------- | ---------------- | -------------------------------------- |
+| AVFoundation | `avfoundation/camera_avfoundation.py`, `configuration_avfoundation.py` | `"avfoundation"` | macOS 네이티브 카메라(PyObjC)          |
+| WebRTC       | `webrtc/camera_webrtc.py`, `configuration_webrtc.py`                   | `"webrtc"`       | WHEP/WebRTC 저지연 원격 스트림(aiortc) |
+| 기타         | `opencv/`, `realsense/`, `reachy2_camera/`, `zmq/`                     | —                | 기존 LeRobot 백엔드                    |
 
 ### 5. 추론/평가 스크립트
 
-| 파일 | 역할 |
-|------|------|
-| `src/lerobot/async_inference/policy_server.py` | gRPC 비동기 policy 추론 서버. policy + 전/후처리 로드, observation 큐 관리 |
-| `user_scripts/server.sh` | base pi05 / adapter / PaliGemma tokenizer 다운로드·경로 패치, `tactile_injection_mode` ↔ MODEL_TYPE(none/cnn/gated) 검증 후 gRPC 서버(0.0.0.0:8080) 기동 |
+| 파일                                                 | 역할                                                                                                                                                            |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lerobot/async_inference/policy_server.py`       | gRPC 비동기 policy 추론 서버. policy + 전/후처리 로드, observation 큐 관리                                                                                      |
+| `user_scripts/server.sh`                             | base pi05 / adapter / PaliGemma tokenizer 다운로드·경로 패치, `tactile_injection_mode` ↔ MODEL_TYPE(none/cnn/gated) 검증 후 gRPC 서버(0.0.0.0:8080) 기동       |
 | `src/lerobot/scripts/lerobot_offline_action_eval.py` | 로봇 없이 녹화 에피소드에서 policy 예측 vs 시연 action 비교. chunk MAE/RMSE, 첫 action 오차, 방향 일치도, 관절별 motion jump 등 지표 계산 후 JSON/NPZ/plot 저장 |
-| `user_scripts/offline_eval.sh` | `server.sh`(자산 준비) 후 A0/A15/A2 3개 체크포인트로 offline eval 실행. ENV: `EPISODE`, `STRIDE`, `MAX_FRAMES` |
-| `experiments/pi05_cup_left/` | PEFT adapter 학습 하네스(A0/A15/A2 변형). prepare/preflight/run/queue 스크립트 |
+| `user_scripts/offline_eval.sh`                       | `server.sh`(자산 준비) 후 A0/A15/A2 3개 체크포인트로 offline eval 실행. ENV: `EPISODE`, `STRIDE`, `MAX_FRAMES`                                                  |
+| `experiments/pi05_cup_left/`                         | PEFT adapter 학습 하네스(A0/A15/A2 변형). prepare/preflight/run/queue 스크립트                                                                                  |
 
 ## 설정 클래스 등록 관계
 

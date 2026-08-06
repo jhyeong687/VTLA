@@ -74,8 +74,7 @@ class CsvPaxiniReader(PaxiniReader):
             raise ValueError(f"num_taxels must be positive, got {num_taxels}.")
         if taxel_value_mode not in ("x", "y", "z", "magnitude"):
             raise ValueError(
-                "taxel_value_mode must be one of 'x', 'y', 'z', or 'magnitude', "
-                f"got {taxel_value_mode!r}."
+                f"taxel_value_mode must be one of 'x', 'y', 'z', or 'magnitude', got {taxel_value_mode!r}."
             )
 
         self.csv_path = Path(csv_path)
@@ -97,7 +96,7 @@ class CsvPaxiniReader(PaxiniReader):
         with self.csv_path.open("r", encoding="utf-8-sig", newline="") as f:
             reader = csv.DictReader(f)
             self._columns = list(reader.fieldnames or [])
-            self._rows = [row for row in reader]
+            self._rows = list(reader)
 
         if not self._rows:
             raise ValueError(f"PXSR CSV has no data rows: {self.csv_path}")
@@ -223,8 +222,7 @@ class SerialPaxiniReader(PaxiniReader):
             raise ValueError(f"skip_bytes must be non-negative, got {skip_bytes}.")
         if taxel_value_mode not in ("x", "y", "z", "magnitude"):
             raise ValueError(
-                "taxel_value_mode must be one of 'x', 'y', 'z', or 'magnitude', "
-                f"got {taxel_value_mode!r}."
+                f"taxel_value_mode must be one of 'x', 'y', 'z', or 'magnitude', got {taxel_value_mode!r}."
             )
 
         self.port = port
@@ -309,7 +307,9 @@ class SerialPaxiniReader(PaxiniReader):
 
             if time.monotonic() >= deadline:
                 if last_error is not None:
-                    raise RuntimeError(f"PXSR background reader has no sample yet: {last_error}") from last_error
+                    raise RuntimeError(
+                        f"PXSR background reader has no sample yet: {last_error}"
+                    ) from last_error
                 raise TimeoutError(f"Timed out waiting for first PXSR sample on {self.port}.")
             time.sleep(0.002)
 
@@ -364,7 +364,9 @@ class SerialPaxiniReader(PaxiniReader):
         elif self.taxel_value_mode == "y":
             value = abs(float(force.raw_y))
         elif self.taxel_value_mode == "magnitude":
-            value = float(np.sqrt(force.raw_x * force.raw_x + force.raw_y * force.raw_y + force.raw_z * force.raw_z))
+            value = float(
+                np.sqrt(force.raw_x * force.raw_x + force.raw_y * force.raw_y + force.raw_z * force.raw_z)
+            )
         else:
             value = float(force.raw_z)
         return value * self.taxel_scale

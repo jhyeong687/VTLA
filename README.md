@@ -33,13 +33,13 @@
 
 ### What this repository adds
 
-| Area | VTLA extension |
-| --- | --- |
-| Robot | `paxini_so101_follower` wrapper와 Paxini UART reader |
-| Tactile | 154 taxel을 `(2, 9, 9)` `float32` 맵으로 저장 |
-| Policy | pi0.5 tactile prefix 및 action-gated injection |
-| Cameras | macOS AVFoundation 및 원격 WebRTC 입력 |
-| Training | A0 / A15 / A2 PEFT-LoRA 실험 하네스 |
+| Area       | VTLA extension                                       |
+| ---------- | ---------------------------------------------------- |
+| Robot      | `paxini_so101_follower` wrapper와 Paxini UART reader |
+| Tactile    | 154 taxel을 `(2, 9, 9)` `float32` 맵으로 저장        |
+| Policy     | pi0.5 tactile prefix 및 action-gated injection       |
+| Cameras    | macOS AVFoundation 및 원격 WebRTC 입력               |
+| Training   | A0 / A15 / A2 PEFT-LoRA 실험 하네스                  |
 | Evaluation | 로봇 실행 전 offline action comparison과 진단 그래프 |
 
 ## Demo
@@ -89,14 +89,14 @@ VTLA의 그리퍼에는 **Paxini GEN3 M3025 계열 분포형 촉각 센서 2개*
   </tr>
 </table>
 
-| Item | Configuration |
-| --- | --- |
-| Sensor | Paxini GEN3 M3025-series distributed tactile sensor × 2 |
-| Placement | Parallel gripper ring / pinky contact surfaces |
-| Spatial elements | 77 taxels per sensor, **154 total** |
-| Stored tensor | `(2, 9, 9)` `float32` with corner padding |
-| Signal used | Z-axis normal-force channel |
-| Interface | Paxini high-speed board → UART at **921,600 baud** → background reader |
+| Item             | Configuration                                                          |
+| ---------------- | ---------------------------------------------------------------------- |
+| Sensor           | Paxini GEN3 M3025-series distributed tactile sensor × 2                |
+| Placement        | Parallel gripper ring / pinky contact surfaces                         |
+| Spatial elements | 77 taxels per sensor, **154 total**                                    |
+| Stored tensor    | `(2, 9, 9)` `float32` with corner padding                              |
+| Signal used      | Z-axis normal-force channel                                            |
+| Interface        | Paxini high-speed board → UART at **921,600 baud** → background reader |
 
 각 프레임의 원시 154차원 신호는 센서의 공간 배치를 유지한 `(2, 9, 9)` 맵으로 변환됩니다. 따라서 모델은 단순 접촉 여부뿐 아니라 **접촉 위치와 압력 분포**까지 함께 학습할 수 있습니다.
 
@@ -110,11 +110,11 @@ VTLA의 그리퍼에는 **Paxini GEN3 M3025 계열 분포형 촉각 센서 2개*
 
 VTLA는 세 가지 촉각 주입 방식을 같은 데이터와 학습 조건에서 비교합니다.
 
-| Variant | Tactile injection | Description |
-| --- | --- | --- |
-| **A0** | `none` | 촉각을 사용하지 않는 vision-language-action baseline |
-| **A15** | `prefix` | CNN tactile encoder 출력을 PaliGemma prefix token으로 삽입 |
-| **A2** | `action_gated` | 접촉 통계로 Gemma action expert의 conditioning을 gating |
+| Variant | Tactile injection | Description                                                |
+| ------- | ----------------- | ---------------------------------------------------------- |
+| **A0**  | `none`            | 촉각을 사용하지 않는 vision-language-action baseline       |
+| **A15** | `prefix`          | CNN tactile encoder 출력을 PaliGemma prefix token으로 삽입 |
+| **A2**  | `action_gated`    | 접촉 통계로 Gemma action expert의 conditioning을 gating    |
 
 <details>
 <summary><strong>Detailed model architecture</strong></summary>
@@ -142,16 +142,16 @@ VTLA는 세 가지 촉각 주입 방식을 같은 데이터와 학습 조건에�
 
 실험 데이터는 SO-101 follower, Paxini dual tactile sensor, 3개 RGB 카메라로 수집했습니다.
 
-| Dataset snapshot | Value |
-| --- | ---: |
-| Task | Pick one cup from the stacked cups and place it on the left side |
-| Episodes | **60** |
-| Frames | **36,625** |
-| Sampling rate | **30 FPS** |
-| RGB cameras | **3 × 1280 × 720**, AV1 |
-| Tactile | **154 taxels → `(2, 9, 9)`**, `float32` |
-| Robot state | **6 DoF**, `float32` |
-| Action | **6 DoF × 50-step chunk**, `float32` |
+| Dataset snapshot |                                                            Value |
+| ---------------- | ---------------------------------------------------------------: |
+| Task             | Pick one cup from the stacked cups and place it on the left side |
+| Episodes         |                                                           **60** |
+| Frames           |                                                       **36,625** |
+| Sampling rate    |                                                       **30 FPS** |
+| RGB cameras      |                                          **3 × 1280 × 720**, AV1 |
+| Tactile          |                          **154 taxels → `(2, 9, 9)`**, `float32` |
+| Robot state      |                                             **6 DoF**, `float32` |
+| Action           |                             **6 DoF × 50-step chunk**, `float32` |
 
 ### Dataset features
 
@@ -174,11 +174,11 @@ action                       float32 [6]
   <img src="./media/readme/vtla/offline_eval_summary.png" alt="A0 A15 A2 offline evaluation summary" width="100%">
 </p>
 
-| Model | First-action MAE ↓ | Chunk MAE ↓ | Direction agreement ↑ | Mean inference |
-| --- | ---: | ---: | ---: | ---: |
-| A0 · no tactile | 8.832 | 9.094 | 55.22% | 0.191 s |
-| **A15 · tactile prefix** | **7.847** | **8.420** | **56.52%** | 0.203 s |
-| A2 · action-gated | 8.355 | 8.915 | 55.18% | 0.198 s |
+| Model                    | First-action MAE ↓ | Chunk MAE ↓ | Direction agreement ↑ | Mean inference |
+| ------------------------ | -----------------: | ----------: | --------------------: | -------------: |
+| A0 · no tactile          |              8.832 |       9.094 |                55.22% |        0.191 s |
+| **A15 · tactile prefix** |          **7.847** |   **8.420** |            **56.52%** |        0.203 s |
+| A2 · action-gated        |              8.355 |       8.915 |                55.18% |        0.198 s |
 
 이 단일 episode의 예비 결과에서는 **A15 tactile prefix**가 가장 낮은 action error를 기록했습니다. 이는 제한된 offline 비교이며, 실제 rollout 성공률이나 일반화 성능을 의미하지 않습니다.
 

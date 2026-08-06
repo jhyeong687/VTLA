@@ -7,7 +7,7 @@ import numpy as np
 
 from lerobot.datasets import LeRobotDataset
 
-from .paxini_reader import CsvPaxiniReader, MockPaxiniReader
+from .paxini_reader import CsvPaxiniReader, MockPaxiniReader, PaxiniReader
 from .tactile_render import TactileHeatmapRenderer, make_mock_taxel_map, taxels_to_stacked_9x9
 
 TACTILE_KEY = "observation.tactile.primary"
@@ -87,6 +87,7 @@ def main() -> None:
     taxel_map = make_mock_taxel_map(args.num_taxels)
     tactile_renderer = TactileHeatmapRenderer(taxel_map=taxel_map, image_size=args.tactile_image_size)
 
+    tactile_reader: PaxiniReader
     if args.csv:
         tactile_reader = CsvPaxiniReader(
             args.csv,
@@ -99,7 +100,9 @@ def main() -> None:
         tactile_reader = MockPaxiniReader(num_taxels=args.num_taxels)
 
     tactile_shape = (
-        (2, 9, 9) if args.tactile_representation == "stacked_9x9" else (args.tactile_image_size, args.tactile_image_size)
+        (2, 9, 9)
+        if args.tactile_representation == "stacked_9x9"
+        else (args.tactile_image_size, args.tactile_image_size)
     )
     features = _make_features(tactile_shape, args.camera_image_size)
     dataset = LeRobotDataset.create(

@@ -13,7 +13,9 @@ from PIL import Image, ImageDraw
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Export Paxini tactile parquet frames as PNG image sequence/video.")
+    parser = argparse.ArgumentParser(
+        description="Export Paxini tactile parquet frames as PNG image sequence/video."
+    )
     parser.add_argument(
         "--parquet",
         type=Path,
@@ -27,9 +29,13 @@ def parse_args() -> argparse.Namespace:
         help="Directory for frame_XXXXXX.png outputs.",
     )
     parser.add_argument("--column", default="observation.tactile.primary", help="Tactile column name.")
-    parser.add_argument("--video", type=Path, default=None, help="Optional MP4 path for a tactile heatmap video.")
+    parser.add_argument(
+        "--video", type=Path, default=None, help="Optional MP4 path for a tactile heatmap video."
+    )
     parser.add_argument("--fps", type=float, default=30.0, help="FPS for --video output.")
-    parser.add_argument("--no-frames", action="store_true", help="Only write --video, not frame_XXXXXX.png files.")
+    parser.add_argument(
+        "--no-frames", action="store_true", help="Only write --video, not frame_XXXXXX.png files."
+    )
     parser.add_argument(
         "--normalization",
         choices=["global", "frame"],
@@ -56,7 +62,9 @@ def colorize_heatmap(gray: np.ndarray) -> np.ndarray:
     return np.rint(np.stack([red, green, blue], axis=-1) * 255.0).astype(np.uint8)
 
 
-def make_panel(arr: np.ndarray, scale_max: float, size: tuple[int, int], label: str | None = None) -> Image.Image:
+def make_panel(
+    arr: np.ndarray, scale_max: float, size: tuple[int, int], label: str | None = None
+) -> Image.Image:
     gray = to_uint8(arr, scale_max)
     img = Image.fromarray(colorize_heatmap(gray), mode="RGB")
     img = img.resize(size, resample=Image.Resampling.NEAREST)
@@ -74,7 +82,9 @@ def render_tactile_frame(arr: np.ndarray, frame_idx: int, timestamp: float, scal
         default_labels = ["ring", "pinky"]
         panels = []
         for channel_idx, channel in enumerate(arr):
-            label = default_labels[channel_idx] if channel_idx < len(default_labels) else f"sensor {channel_idx}"
+            label = (
+                default_labels[channel_idx] if channel_idx < len(default_labels) else f"sensor {channel_idx}"
+            )
             panels.append(make_panel(channel, scale_max, (256, 256), label=label))
         gap = 16
         img = Image.new("RGB", (len(panels) * 256 + max(len(panels) - 1, 0) * gap, 256), (0, 0, 0))
@@ -164,7 +174,9 @@ def main() -> None:
     tactile_col = table[args.column]
     arrays = [np.asarray(tactile_col[i].as_py(), dtype=np.float32) for i in range(len(tactile_col))]
 
-    frame_indices = table["frame_index"].to_pylist() if "frame_index" in table.column_names else list(range(len(arrays)))
+    frame_indices = (
+        table["frame_index"].to_pylist() if "frame_index" in table.column_names else list(range(len(arrays)))
+    )
     timestamps = table["timestamp"].to_pylist() if "timestamp" in table.column_names else [0.0] * len(arrays)
 
     global_max = max((float(arr.max(initial=0.0)) for arr in arrays), default=0.0)

@@ -82,9 +82,7 @@ def _list_avfoundation_video_devices() -> list[dict[str, Any]]:
 
 def _resolve_avfoundation_device_name(identifier: str) -> dict[str, Any]:
     devices = _list_avfoundation_video_devices()
-    snapshot = ", ".join(
-        f"{device['index']}: {device['name']} ({device['unique_id']})" for device in devices
-    )
+    snapshot = ", ".join(f"{device['index']}: {device['name']} ({device['unique_id']})" for device in devices)
     logger.info("AVFoundation devices: %s", snapshot or "none")
 
     unique_id_matches = [device for device in devices if device["unique_id"] == identifier]
@@ -104,9 +102,7 @@ def _resolve_avfoundation_device_name(identifier: str) -> dict[str, Any]:
             "Configure index_or_path with the device unique_id instead."
         )
 
-    available = ", ".join(
-        f"{device['name']} ({device['unique_id']})" for device in devices
-    ) or "none"
+    available = ", ".join(f"{device['name']} ({device['unique_id']})" for device in devices) or "none"
     raise ConnectionError(
         f"AVFoundation video device '{identifier}' was not found by name or unique_id. "
         f"Available devices: {available}."
@@ -311,7 +307,11 @@ class OpenCVCamera(Camera):
         if self._avfoundation_device_name is not None:
             open_params = self._make_avfoundation_open_params()
             if open_params:
-                logger.info("%sOpening AVFoundation camera with requested profile params: %s.", camera_key, open_params)
+                logger.info(
+                    "%sOpening AVFoundation camera with requested profile params: %s.",
+                    camera_key,
+                    open_params,
+                )
 
         if open_params:
             self.videocapture = cv2.VideoCapture(target, self.backend, open_params)

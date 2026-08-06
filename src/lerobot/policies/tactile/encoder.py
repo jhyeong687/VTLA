@@ -46,15 +46,16 @@ def _as_bchw(x: Tensor, input_channels: int) -> Tensor:
     if x.dim() == 4 and x.shape[1] == input_channels:
         return x
     raise ValueError(
-        "Expected tactile tensor shape (H, W), (B, H, W), (C, H, W), or (B, C, H, W), "
-        f"got {tuple(x.shape)}."
+        f"Expected tactile tensor shape (H, W), (B, H, W), (C, H, W), or (B, C, H, W), got {tuple(x.shape)}."
     )
 
 
 class TactileCNN(nn.Module):
     """CNN tactile backbone that outputs one feature vector per sample."""
 
-    def __init__(self, input_shape: tuple[int, ...] = (2, 9, 9), feature_dim: int = 1024, dropout: float = 0.3):
+    def __init__(
+        self, input_shape: tuple[int, ...] = (2, 9, 9), feature_dim: int = 1024, dropout: float = 0.3
+    ):
         super().__init__()
         self.input_shape = input_shape
         self.feature_dim = feature_dim
@@ -95,7 +96,9 @@ class TactileCNN(nn.Module):
 class TactileAttentionCNN(nn.Module):
     """CNN tactile backbone with spatial attention."""
 
-    def __init__(self, input_shape: tuple[int, ...] = (2, 9, 9), feature_dim: int = 1024, dropout: float = 0.4):
+    def __init__(
+        self, input_shape: tuple[int, ...] = (2, 9, 9), feature_dim: int = 1024, dropout: float = 0.4
+    ):
         super().__init__()
         self.input_shape = input_shape
         self.feature_dim = feature_dim
@@ -121,7 +124,7 @@ class TactileAttentionCNN(nn.Module):
             nn.Linear(512, 512),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(512, feature_dim), # 💡 동적 차원 연동
+            nn.Linear(512, feature_dim),  # 💡 동적 차원 연동
         )
 
     def forward(self, x: Tensor) -> Tensor:
@@ -138,7 +141,10 @@ class TactileAttentionCNN(nn.Module):
 
 class DualPaxini3DCNN(nn.Module):
     """6월 데이터셋 고도화(시계열/멀티채널) 가동 시 스위칭할 확장 선행 구현 백본"""
-    def __init__(self, input_shape: tuple[int, ...] = (3, 2, 9, 9), feature_dim: int = 1024, dropout: float = 0.3):
+
+    def __init__(
+        self, input_shape: tuple[int, ...] = (3, 2, 9, 9), feature_dim: int = 1024, dropout: float = 0.3
+    ):
         super().__init__()
         self.input_channels = input_shape[0]
         self.feature_dim = feature_dim
@@ -161,7 +167,7 @@ class DualPaxini3DCNN(nn.Module):
             nn.Linear(conv_output_dim, 512),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(512, feature_dim) # 💡 동적 차원 연동
+            nn.Linear(512, feature_dim),  # 💡 동적 차원 연동
         )
 
     def forward(self, x: Tensor) -> Tensor:
@@ -204,7 +210,9 @@ class TactileTokenEncoder(nn.Module):
         elif encoder_type == "dual_paxini_3d":
             self.backbone = DualPaxini3DCNN(input_shape, feature_dim, dropout)
         else:
-            raise ValueError(f"Unknown encoder_type: {encoder_type!r}. Choose 'cnn', 'attention', or 'dual_paxini_3d'.")
+            raise ValueError(
+                f"Unknown encoder_type: {encoder_type!r}. Choose 'cnn', 'attention', or 'dual_paxini_3d'."
+            )
 
         self.token_proj = nn.Linear(feature_dim, n_tokens * feature_dim) if n_tokens > 1 else None
 

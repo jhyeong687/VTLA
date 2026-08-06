@@ -53,8 +53,7 @@ def _import_avfoundation_stack():
         from Foundation import NSObject  # type: ignore[import-not-found]
     except ImportError as e:
         raise RuntimeError(
-            "AVFoundationCamera requires PyObjC AVFoundation support. "
-            "Install dependencies with `uv sync`."
+            "AVFoundationCamera requires PyObjC AVFoundation support. Install dependencies with `uv sync`."
         ) from e
 
     return AVFoundation, CoreMedia, Quartz, objc, NSObject
@@ -140,7 +139,9 @@ def _set_resolution_session_preset_if_supported(
     capture_height: int | None,
 ) -> None:
     if capture_width != 1280 or capture_height != 720:
-        logger.info("Using default AVFoundation session preset for capture size %sx%s.", capture_width, capture_height)
+        logger.info(
+            "Using default AVFoundation session preset for capture size %sx%s.", capture_width, capture_height
+        )
         return
 
     preset = getattr(avfoundation, "AVCaptureSessionPreset1280x720", None)
@@ -187,9 +188,7 @@ def _resolve_avfoundation_device(identifier: str) -> Any:
         return name_matches[0]
 
     if len(name_matches) > 1:
-        matches = ", ".join(
-            f"unique_id='{device.uniqueID()}'" for device in name_matches
-        )
+        matches = ", ".join(f"unique_id='{device.uniqueID()}'" for device in name_matches)
         raise ConnectionError(
             f"AVFoundation video device name '{identifier}' is ambiguous; matches: {matches}. "
             "Configure device_id with the device unique_id instead."
@@ -233,7 +232,7 @@ def _get_sample_buffer_delegate_class() -> type[Any]:
 
     _avfoundation, core_media, quartz, objc, ns_object = _import_avfoundation_stack()
 
-    class AVFoundationSampleBufferDelegate(ns_object):
+    class AVFoundationSampleBufferDelegate(ns_object):  # type: ignore[misc, valid-type]
         def initWithCamera_(self, owner):  # noqa: N802
             self = objc.super(AVFoundationSampleBufferDelegate, self).init()
             if self is None:
@@ -258,7 +257,9 @@ def _get_sample_buffer_delegate_class() -> type[Any]:
                 try:
                     buffer = _base_address_as_buffer(base_address, bytes_per_row * height)
                 except TypeError as e:
-                    logger.warning("Error reading CVPixelBuffer base address for %s: %s", self.owner._context(), e)
+                    logger.warning(
+                        "Error reading CVPixelBuffer base address for %s: %s", self.owner._context(), e
+                    )
                     return
                 if buffer is None:
                     logger.warning("CVPixelBuffer base address is None for %s.", self.owner._context())
@@ -290,6 +291,8 @@ class AVFoundationCamera(Camera):
         self.color_mode = config.color_mode
         self.warmup_s = config.warmup_s
         self.rotation: int | None = get_cv2_rotation(config.rotation)
+        self.capture_width: int | None
+        self.capture_height: int | None
 
         if self.height and self.width:
             self.capture_width, self.capture_height = self.width, self.height

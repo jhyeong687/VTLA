@@ -691,8 +691,8 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
             self.tactile_encoders, tactile_maps, tactile_masks, strict=True
         ):
 
-            def tactile_embed_func(tactile):
-                return encoder(tactile)
+            def tactile_embed_func(tactile, current_encoder=encoder):
+                return current_encoder(tactile)
 
             tactile_emb = self._apply_checkpoint(tactile_embed_func, tactile)
             bsize, num_tactile_embs = tactile_emb.shape[:2]
@@ -1295,9 +1295,7 @@ class PI0Policy(PreTrainedPolicy):
                 tactile = torch.zeros((batch_size, *feature.shape), dtype=torch.float32, device=device)
                 mask = torch.zeros(batch_size, dtype=torch.bool, device=device)
 
-            if tactile.dim() == 5:
-                tactile = tactile[:, -1]
-            elif len(feature.shape) == 2 and tactile.dim() == 4 and tactile.shape[1] != 1:
+            if tactile.dim() == 5 or len(feature.shape) == 2 and tactile.dim() == 4 and tactile.shape[1] != 1:
                 tactile = tactile[:, -1]
 
             tactile_maps.append(tactile)

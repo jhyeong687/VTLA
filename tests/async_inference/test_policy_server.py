@@ -130,7 +130,10 @@ def test_normalize_pretrained_name_or_path_uses_server_model_root(monkeypatch):
         )
         == "/workspace/vtla/hf_models/pi05-so101-paxini-cup-left-adapters/all_checkpoints/run/checkpoints/000001"
     )
-    assert normalize_pretrained_name_or_path("./hf_models/pi05/checkpoint") == "/workspace/vtla/hf_models/pi05/checkpoint"
+    assert (
+        normalize_pretrained_name_or_path("./hf_models/pi05/checkpoint")
+        == "/workspace/vtla/hf_models/pi05/checkpoint"
+    )
     assert normalize_pretrained_name_or_path("/tmp/local-model") == "/tmp/local-model"
     assert normalize_pretrained_name_or_path("Leedohyeon/model") == "Leedohyeon/model"
 

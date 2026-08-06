@@ -8,7 +8,7 @@ from lerobot.types import RobotObservation
 from lerobot.utils.constants import OBS_TACTILE
 
 from .config_paxini_so101 import PaxiniSO101FollowerConfig
-from .paxini_reader import CsvPaxiniReader, MockPaxiniReader, SerialPaxiniReader
+from .paxini_reader import CsvPaxiniReader, MockPaxiniReader, PaxiniReader, SerialPaxiniReader
 from .tactile_render import (
     TactileHeatmapRenderer,
     load_taxel_map_xlsx,
@@ -41,6 +41,7 @@ class PaxiniSO101Follower(SOFollower):
             taxel_map=taxel_map,
             image_size=config.tactile_image_size,
         )
+        self.tactile: PaxiniReader
         if config.tactile_csv_path is not None:
             self.tactile = CsvPaxiniReader(
                 config.tactile_csv_path,
@@ -63,7 +64,7 @@ class PaxiniSO101Follower(SOFollower):
             )
 
     @cached_property
-    def observation_features(self) -> dict[str, type | tuple | PolicyFeature]:
+    def observation_features(self) -> dict[str, type | tuple | PolicyFeature]:  # type: ignore[override]
         tactile_shape = (
             (2, 9, 9)
             if self.config.tactile_representation == "stacked_9x9"

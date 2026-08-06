@@ -363,9 +363,7 @@ def _evaluate_model(
         predicted = frame_predictions[0]
         horizon = min(predicted.shape[0], demonstration.shape[0])
         predictions.append(predicted[:horizon].numpy())
-        prediction_samples.append(
-            np.stack([sample[:horizon].numpy() for sample in frame_predictions])
-        )
+        prediction_samples.append(np.stack([sample[:horizon].numpy() for sample in frame_predictions]))
         teacher_loss_samples.append(frame_teacher_losses)
         demonstrations.append(demonstration[:horizon].numpy())
         valid_masks.append(valid[:horizon].numpy())
@@ -407,9 +405,7 @@ def _evaluate_model(
         if teacher_loss_repeats > 0
         else np.empty((len(selected_indices), 0), dtype=np.float32)
     )
-    metrics = compute_action_metrics(
-        predicted_np, demonstrated_np, valid_np, states_np, direction_threshold
-    )
+    metrics = compute_action_metrics(predicted_np, demonstrated_np, valid_np, states_np, direction_threshold)
 
     joint_names = _feature_names(dataset.meta, ACTION, predicted_np.shape[-1])
     for joint, joint_name in zip(metrics["per_joint"], joint_names, strict=True):
@@ -420,7 +416,11 @@ def _evaluate_model(
         mask = (frames_np >= start_frame) & (frames_np <= end_frame)
         if mask.any():
             phase_metrics[phase_name] = compute_action_metrics(
-                predicted_np[mask], demonstrated_np[mask], valid_np[mask], states_np[mask], direction_threshold
+                predicted_np[mask],
+                demonstrated_np[mask],
+                valid_np[mask],
+                states_np[mask],
+                direction_threshold,
             )
 
     timing_summary = {
@@ -517,9 +517,7 @@ def _compute_stochastic_diagnostics(
     first_actions = prediction_samples[:, :, 0, :]
     first_action_std = first_actions.std(axis=1)
     first_action_range = np.ptp(first_actions, axis=1)
-    per_seed_first_mae = np.mean(
-        np.abs(first_actions - demonstrated[:, None, 0, :]), axis=(0, 2)
-    )
+    per_seed_first_mae = np.mean(np.abs(first_actions - demonstrated[:, None, 0, :]), axis=(0, 2))
     sampling = {
         "num_seeds": int(prediction_samples.shape[1]),
         "mean_first_action_std": float(first_action_std.mean()),
@@ -536,9 +534,7 @@ def _compute_stochastic_diagnostics(
     teacher_summary: dict[str, Any] = {"num_repeats": int(teacher_losses.shape[1])}
     if teacher_losses.shape[1] > 0:
         teacher_mean_per_frame = teacher_losses.mean(axis=1)
-        sampled_error_per_frame = np.mean(
-            np.abs(first_actions - demonstrated[:, None, 0, :]), axis=(1, 2)
-        )
+        sampled_error_per_frame = np.mean(np.abs(first_actions - demonstrated[:, None, 0, :]), axis=(1, 2))
         if np.std(teacher_mean_per_frame) > 0 and np.std(sampled_error_per_frame) > 0:
             correlation = float(np.corrcoef(teacher_mean_per_frame, sampled_error_per_frame)[0, 1])
         else:

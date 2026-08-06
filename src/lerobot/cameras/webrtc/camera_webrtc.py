@@ -351,7 +351,9 @@ class WebRTCCamera(Camera):
             self.decoder_queue = LatestOnlyThreadQueue()
             setattr(receiver, decoder_queue_attr, self.decoder_queue)
         else:
-            logger.warning("%s could not patch aiortc decoder queue; stale encoded frames may add latency.", self)
+            logger.warning(
+                "%s could not patch aiortc decoder queue; stale encoded frames may add latency.", self
+            )
 
         if self.jitter_buffer_capacity is None:
             return
@@ -409,9 +411,7 @@ class WebRTCCamera(Camera):
                 frame = self._drain_to_newest_decoded_frame(frame)
                 receive_time_s = time.perf_counter()
                 if self.decoded_queue is not None and self.decoded_queue.last_put_s is not None:
-                    self._latest_receiver_age_ms = (
-                        receive_time_s - self.decoded_queue.last_put_s
-                    ) * 1e3
+                    self._latest_receiver_age_ms = (receive_time_s - self.decoded_queue.last_put_s) * 1e3
 
                 conversion_start_s = time.perf_counter()
                 image = self._frame_to_ndarray(frame)

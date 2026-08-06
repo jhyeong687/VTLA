@@ -237,9 +237,7 @@ def test_frame_to_ndarray_uses_configured_color_mode_and_detects_resolution():
 def test_frame_to_ndarray_rejects_unexpected_resolution():
     image = np.zeros((3, 4, 3), dtype=np.uint8)
     frame = FakeFrame(image)
-    camera = WebRTCCamera(
-        WebRTCCameraConfig(whep_url="http://example.com/cam/whep", width=1280, height=720)
-    )
+    camera = WebRTCCamera(WebRTCCameraConfig(whep_url="http://example.com/cam/whep", width=1280, height=720))
 
     with pytest.raises(RuntimeError, match="do not match configured"):
         camera._frame_to_ndarray(frame)
