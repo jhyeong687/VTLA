@@ -50,5 +50,5 @@ run_resume() {
 }
 
 run_resume A0 'A0_no_tactile_4000steps_*'
-run_resume A15 'A15_cnn_tactile_prefix_4000steps_*'
+run_resume A1.5 'A1.5_cnn_tactile_prefix_4000steps_*'
 run_resume A2 'A2_gated_action_tactile_4000steps_*'

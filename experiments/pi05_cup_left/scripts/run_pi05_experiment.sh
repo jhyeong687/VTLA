@@ -30,8 +30,8 @@ case "$METHOD" in
     JOB_NAME="A0_no_tactile"
     TACTILE_MODE="none"
     ;;
-  A15)
-    JOB_NAME="A15_cnn_tactile_prefix"
+  A1.5)
+    JOB_NAME="A1.5_cnn_tactile_prefix"
     TACTILE_MODE="prefix"
     ;;
   A2)
@@ -39,7 +39,7 @@ case "$METHOD" in
     TACTILE_MODE="action_gated"
     ;;
   *)
-    echo "Unknown METHOD '$METHOD'. Expected A0, A15, or A2." >&2
+    echo "Unknown METHOD '$METHOD'. Expected A0, A1.5, or A2." >&2
     exit 2
     ;;
 esac

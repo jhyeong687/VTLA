@@ -71,7 +71,7 @@ NODES = {
         "data",
     ),
     "I": ("I", 94, 40, 40, 10, "Replay & visualization", "tactile heatmap validation", "data"),
-    "J": ("J", 94, 22, 40, 12, "pi0.5 VTLA training", "A0 / A15 / A2 variants", "data"),
+    "J": ("J", 94, 22, 40, 12, "pi0.5 VTLA training", "A0 / A1.5 / A2 variants", "data"),
 }
 
 # ============================ EDGES ========================================

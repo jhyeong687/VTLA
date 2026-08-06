@@ -5,7 +5,7 @@ Paxini tactile robot으로 rollout하는 최소 절차입니다.
 
 ## 필요한 것
 
-- VTLA 코드: 이 repo revision이 필요합니다. A15/A2 adapter는 로컬 pi0.5
+- VTLA 코드: 이 repo revision이 필요합니다. A1.5/A2 adapter는 로컬 pi0.5
   tactile injection 코드에 의존합니다.
 - Base pi0.5: 기본 경로는 `/workspace/vtla/hf_models/pi05_base`입니다.
 - Adapter: `pretrained_model/` 폴더 전체가 필요합니다.
@@ -93,23 +93,23 @@ hf download "$ADAPTER_REPO" \
 권장 rollout 후보:
 
 ```text
-A15_cnn_tactile_prefix_r16/checkpoints/020000/pretrained_model
-A15_cnn_tactile_prefix/checkpoints/020000/pretrained_model
+A1.5_cnn_tactile_prefix_r16/checkpoints/020000/pretrained_model
+A1.5_cnn_tactile_prefix/checkpoints/020000/pretrained_model
 A2_gated_action_tactile/checkpoints/020000/pretrained_model
 A0_no_tactile/checkpoints/020000/pretrained_model
 ```
 
-A15/A2는 tactile 입력을 쓰는 adapter입니다. A0는 no-tactile baseline입니다.
+A1.5/A2는 tactile 입력을 쓰는 adapter입니다. A0는 no-tactile baseline입니다.
 
 ## Rollout
 
-A15 r=16 20k 후보:
+A1.5 r=16 20k 후보:
 
 ```bash
 source .venv/bin/activate
 
 lerobot-rollout \
-  --policy.path=/workspace/vtla/hf_restore/pi05_cup_left_adapters/A15_cnn_tactile_prefix_r16/checkpoints/020000/pretrained_model \
+  --policy.path=/workspace/vtla/hf_restore/pi05_cup_left_adapters/A1.5_cnn_tactile_prefix_r16/checkpoints/020000/pretrained_model \
   --robot.type=paxini_so101_follower \
   --robot.port=/dev/ttyACM_FOLLOWER \
   --robot.id=so101_paxini \
@@ -134,11 +134,11 @@ lerobot-rollout \
 ```
 
 `paxini_so101_follower`는 `observation.tactile.primary`를 `(2, 9, 9)` 형태로
-내보냅니다. A15/A2 adapter는 이 feature shape에 맞춰 학습되었습니다.
+내보냅니다. A1.5/A2 adapter는 이 feature shape에 맞춰 학습되었습니다.
 
 ## Offline action comparison
 
-실제 로봇에 명령을 보내기 전에, 학습 episode의 observation으로 A0/A15/A2의
+실제 로봇에 명령을 보내기 전에, 학습 episode의 observation으로 A0/A1.5/A2의
 예측 action과 demonstration action을 비교합니다. 먼저 적은 frame으로 smoke
 test를 실행합니다.
 
@@ -177,4 +177,4 @@ EPISODE=0 STRIDE=20 NUM_SEEDS=8 TEACHER_LOSS_REPEATS=8 \
   설치가 빠졌거나 다른 repo의 venv를 쓰고 있는 것입니다.
 - adapter 로딩 중 base model 경로 오류가 나면
   `/workspace/vtla/hf_models/pi05_base`가 실제 base model을 가리키는지 확인하세요.
-- tactile 없는 상태에서 A15/A2를 돌리면 실행은 될 수 있지만 tactile test가 아닙니다.
+- tactile 없는 상태에서 A1.5/A2를 돌리면 실행은 될 수 있지만 tactile test가 아닙니다.

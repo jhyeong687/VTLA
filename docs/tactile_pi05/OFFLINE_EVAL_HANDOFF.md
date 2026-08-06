@@ -33,7 +33,7 @@ A0
 all_checkpoints/pi05_cup_left/A0_no_tactile_4000steps_20260629_151550/checkpoints/020000/pretrained_model
 
 A1.5
-all_checkpoints/pi05_cup_left/A15_cnn_tactile_prefix_4000steps_20260629_163919/checkpoints/020000/pretrained_model
+all_checkpoints/pi05_cup_left/A1.5_cnn_tactile_prefix_4000steps_20260629_163919/checkpoints/020000/pretrained_model
 
 A2
 all_checkpoints/pi05_cup_left/A2_gated_action_tactile_4000steps_20260629_180545/checkpoints/020000/pretrained_model
