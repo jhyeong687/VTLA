@@ -6,6 +6,8 @@
 
 시각·촉각·언어를 함께 이해해 로봇 행동을 생성하는 **pi0.5 기반 멀티모달 로봇 학습 스택**
 
+[**Project Page · 데모 및 연구 결과**](https://jhyeong687.github.io/VTLA/)
+
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![LeRobot](https://img.shields.io/badge/Built%20on-LeRobot-FFD21E)](https://github.com/huggingface/lerobot)
 [![Policy](https://img.shields.io/badge/Policy-pi0.5-7C3AED)](https://huggingface.co/lerobot/pi05_base)
