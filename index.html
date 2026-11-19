@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#faf7f7">
+  <meta name="description" content="VTLA studies how fingertip touch can inform a vision-language-action policy for SO-101 manipulation. Explore the robot, tactile signals, and preliminary offline results.">
+  <meta property="og:title" content="VTLA — Learning to grasp with touch">
+  <meta property="og:description" content="A vision–tactile–language–action research prototype for SO-101, Paxini, and π₀.₅.">
+  <meta property="og:image" content="https://jhyeong687.github.io/VTLA/assets/robot.jpg">
+  <title>VTLA — Learning to grasp with touch</title>
+  <link rel="stylesheet" href="site.css">
+  <script src="site.js" defer></script>
+</head>
+<body id="top">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="masthead">
+    <a class="wordmark" href="#top">VTLA</a>
+    <nav aria-label="Quick links" class="mast-links">
+      <a href="#approach">Method</a>
+      <a href="#evaluation">Results</a>
+      <a class="repo-link" href="https://github.com/jhyeong687/VTLA">GitHub</a>
+    </nav>
+  </header>
+  <div class="reading-progress" aria-hidden="true"><span></span></div>
+
+  <main id="main">
+    <section class="hero page-width" aria-labelledby="page-title">
+      <div class="hero-intro">
+        <p class="eyebrow"><span class="label-rule"></span>Vision · Tactile · Language · Action</p>
+        <h1 id="page-title">Learning to grasp <em>with touch.</em></h1>
+        <p class="hero-deck">Can fingertip sensing improve next-action prediction? We compare three π₀.₅ policy variants using recorded cup pick-and-place demonstrations from the SO-101.</p>
+        <div class="hero-links">
+          <a class="button primary" href="#demo"><span class="play-icon" aria-hidden="true"></span>Watch the demo</a>
+          <a class="button secondary" href="https://github.com/jhyeong687/VTLA">View source</a>
+        </div>
+      </div>
+
+      <figure class="hero-figure">
+        <div class="hero-image">
+          <img src="assets/robot.jpg" width="1400" height="818" alt="SO-101 robot with a tactile gripper reaching for a paper cup">
+          <span class="contact-marker" aria-hidden="true"></span>
+          <span class="frame-corner top-left" aria-hidden="true"></span>
+          <span class="frame-corner top-right" aria-hidden="true"></span>
+          <span class="frame-corner bottom-left" aria-hidden="true"></span>
+          <span class="frame-corner bottom-right" aria-hidden="true"></span>
+        </div>
+        <figcaption><span>SO-101 with a dual-sensor gripper</span><span class="caption-meta">Paxini</span></figcaption>
+      </figure>
+      <dl class="project-meta">
+        <div><dt>Platform</dt><dd>SO-101</dd></div>
+        <div><dt>Policy</dt><dd>π<sub>0</sub>.5</dd></div>
+        <div><dt>Dataset</dt><dd>60 demonstrations</dd></div>
+        <div><dt>Stage</dt><dd>Research prototype</dd></div>
+      </dl>
+    </section>
+
+    <div class="article-layout page-width">
+      <aside class="contents">
+        <nav aria-label="On this page">
+          <p class="eyebrow">On this page</p>
+          <a href="#overview" aria-current="location">Research summary</a>
+          <a href="#demo">Robot demo</a>
+          <a href="#approach">Architecture</a>
+          <a href="#hardware">Hardware &amp; data</a>
+          <a href="#evaluation">Offline evaluation</a>
+        </nav>
+      </aside>
+
+      <div class="article">
+        <section id="overview" class="chapter">
+          <h2>Research summary</h2>
+          <div class="summary-grid">
+            <div class="summary-copy">
+              <p class="lede">Two Paxini sensors measure normal force at the gripper’s fingertips. VTLA tests two ways to feed those measurements into π₀.₅.</p>
+              <p>Across 408 frames of one recorded episode, the <strong>A1.5 tactile prefix</strong> had the lowest error for both the first action and the full action chunk. Physical rollout performance remains an open question.</p>
+            </div>
+            <div class="finding">
+              <p class="eyebrow">First-action MAE</p>
+              <dl class="finding-values">
+                <div><dt>A0 · Baseline</dt><dd>8.832</dd></div>
+                <div><dt>A1.5 · Prefix</dt><dd>7.847</dd></div>
+              </dl>
+              <a class="text-link" href="#evaluation">See all results</a>
+            </div>
+          </div>
+        </section>
+
+        <section id="demo" class="chapter">
+          <h2>From camera to contact</h2>
+          <p>Pick one cup from the stack and place it on the left. The recordings show the wrist-camera perspective and force readings from the two gripper surfaces during the demonstration.</p>
+          <figure class="instrument demo" id="demo-player">
+            <div class="figure-header"><span>Cup pick-and-place</span><span>Recorded demonstration</span></div>
+            <div class="demo-grid">
+              <div>
+                <p class="feed-label">Wrist camera</p>
+                <video controls playsinline muted preload="metadata" poster="assets/wrist-poster.jpg" aria-label="Wrist-camera cup manipulation">
+                  <source src="assets/wrist.mp4" type="video/mp4">
+                  <a href="assets/wrist.mp4">Download the wrist-camera clip</a>
+                </video>
+              </div>
+              <div>
+                <p class="feed-label">Paxini force map</p>
+                <video controls playsinline muted preload="metadata" poster="assets/tactile-poster.jpg" aria-label="Tactile heatmaps for ring and pinky sensors">
+                  <source src="assets/tactile.mp4" type="video/mp4">
+                  <a href="assets/tactile.mp4">Download the tactile clip</a>
+                </video>
+              </div>
+            </div>
+            <div class="transport" hidden>
+              <button class="transport-button" type="button"><span class="play-icon" aria-hidden="true"></span><span class="transport-label">Play</span></button>
+              <input class="seek" type="range" min="0" max="15" step="0.05" value="0" aria-label="Seek both clips">
+              <output class="time" aria-label="Playback time">0:00 / 0:15</output>
+            </div>
+            <figcaption>Use the shared timeline to inspect both clips. The heatmaps display normal force across the ring and pinky sensors.</figcaption>
+          </figure>
+        </section>
+
+        <section id="approach" class="chapter">
+          <h2>Where touch enters π₀.₅</h2>
+          <p>All three variants use camera views, a language instruction and joint state. Follow the signal to see whether tactile measurements enter the PaliGemma prefix or the Gemma action expert.</p>
+          <figure class="instrument architecture" id="architecture" data-variant="prefix">
+            <div class="figure-header"><span>Policy architecture</span><span>Interactive schematic</span></div>
+            <fieldset class="selectors variant-select" hidden>
+              <legend class="sr-only">Policy variant</legend>
+              <label><input type="radio" name="variant" value="baseline"><span>A0 · Baseline</span></label>
+              <label><input type="radio" name="variant" value="prefix" checked><span>A1.5 · Prefix</span></label>
+              <label><input type="radio" name="variant" value="gated"><span>A2 · Action gated</span></label>
+            </fieldset>
+            <div class="flow" data-stage="condition" hidden>
+              <svg class="flow-connections" aria-hidden="true" focusable="false">
+                <defs>
+                  <marker id="arrow-common" markerUnits="userSpaceOnUse" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="10" markerHeight="10" orient="auto">
+                    <path d="M 2 1.75 L 8 5 L 2 8.25" stroke-linecap="round" stroke-linejoin="round"/>
+                  </marker>
+                  <marker id="arrow-touch" markerUnits="userSpaceOnUse" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="10" markerHeight="10" orient="auto">
+                    <path d="M 2 1.75 L 8 5 L 2 8.25" stroke-linecap="round" stroke-linejoin="round"/>
+                  </marker>
+                </defs>
+              </svg>
+              <div class="flow-node context"><small>Observations</small><strong>Vision, language &amp; state</strong><span>3 RGB views · instruction · joints</span></div>
+              <div class="flow-node touch"><small>Paxini sensors</small><strong>Spatial force map</strong><span>154 taxels · 2 × 9 × 9</span></div>
+              <div class="flow-node encoder"><small>Tactile processing</small><strong data-encoder-title>CNN encoder</strong><span data-encoder-detail>Contact map to prefix token</span></div>
+              <div class="flow-node prefix"><small>π₀.₅ context</small><strong>PaliGemma prefix</strong><span>Visual &amp; language embeddings</span></div>
+              <div class="flow-node expert"><small>π₀.₅ prediction</small><strong>Gemma action expert</strong><span>Flow matching</span></div>
+              <div class="flow-node action"><small>Output</small><strong>Action chunk</strong><span>50 steps · 6 DoF</span></div>
+            </div>
+            <div class="flow-controls" hidden>
+              <div class="flow-steps" role="group" aria-label="Steps in the signal flow">
+                <button type="button" data-step="observe" aria-pressed="false">Observe</button>
+                <button type="button" data-step="condition" aria-pressed="true">Condition</button>
+                <button type="button" data-step="predict" aria-pressed="false">Predict</button>
+              </div>
+              <button type="button" class="flow-play"><span class="play-icon" aria-hidden="true"></span><span data-flow-play-label>Play signal flow</span></button>
+            </div>
+            <p class="flow-step-note" data-flow-step aria-live="off" hidden></p>
+            <figcaption>
+              <span data-flow-fallback>A1.5 encodes the tactile map with a CNN and inserts the resulting token into the PaliGemma prefix.</span>
+              <span class="flow-legend" hidden>
+                <span class="shared">Shared path</span><span class="tactile">Tactile path</span><span class="flow-timing">Illustrative timing</span>
+              </span>
+            </figcaption>
+          </figure>
+          <details class="disclosure">
+            <summary>Read the three variant definitions</summary>
+            <dl>
+              <dt>A0 · Baseline</dt><dd>Uses vision, language and robot joint state without tactile input.</dd>
+              <dt>A1.5 · Tactile prefix</dt><dd>Encodes the tactile map with a CNN and inserts the resulting token into the PaliGemma prefix.</dd>
+              <dt>A2 · Action gated</dt><dd>Uses local and global contact statistics to gate conditioning in the Gemma action expert.</dd>
+            </dl>
+          </details>
+          <a class="text-link" href="https://github.com/jhyeong687/VTLA/blob/main/docs/tactile_pi05/ARCHITECTURE.md">Implementation notes on GitHub</a>
+        </section>
+
+        <section id="hardware" class="chapter">
+          <h2>A closer look at the testbed</h2>
+          <p>The SO-101 gripper holds two Paxini GEN3 M3025-series sensors, one on each contact surface. Each sensor measures normal force at 77 taxels. The data pipeline preserves their positions in two padded 9 × 9 maps.</p>
+          <div class="hardware-gallery">
+            <figure><img loading="lazy" src="assets/robot.jpg" width="1400" height="818" alt="SO-101 arm and its custom gripper on the cup testbed"><figcaption>SO-101 with the dual-sensor gripper</figcaption></figure>
+            <figure><img loading="lazy" src="assets/mount.jpg" width="778" height="822" alt="CAD render of the custom tactile sensor mount"><figcaption>Custom sensor mount in CAD</figcaption></figure>
+          </div>
+          <dl class="key-facts hardware-facts">
+            <div><dt>60</dt><dd>Recorded episodes</dd></div>
+            <div><dt>36,625</dt><dd>Dataset frames</dd></div>
+            <div><dt>30 Hz</dt><dd>Sampling rate</dd></div>
+          </dl>
+          <figure class="instrument camera-viewer">
+            <div class="figure-header"><span>RGB camera views</span><span>1280 × 720 capture</span></div>
+            <fieldset class="selectors camera-select">
+              <legend class="sr-only">Camera view</legend>
+              <label><input type="radio" name="camera" value="top" checked><span>Top</span></label>
+              <label><input type="radio" name="camera" value="wrist"><span>Wrist</span></label>
+              <label><input type="radio" name="camera" value="belly"><span>Belly</span></label>
+            </fieldset>
+            <div class="camera-frame">
+              <img class="camera-top" loading="lazy" src="assets/camera_top.jpg" width="720" height="406" alt="Top camera view of the SO-101 workspace">
+              <img class="camera-wrist" loading="lazy" src="assets/camera_wrist.jpg" width="720" height="406" alt="Wrist camera view from the gripper">
+              <img class="camera-belly" loading="lazy" src="assets/camera_belly.jpg" width="720" height="406" alt="Belly camera view of the SO-101 testbed">
+            </div>
+          </figure>
+        </section>
+
+        <section id="evaluation" class="chapter">
+          <h2>Comparing predicted actions</h2>
+          <p>The offline evaluation compares policy predictions against the recorded actions on all 408 frames of episode 0. A1.5 had the lowest first-action and action-chunk mean absolute errors in that episode.</p>
+          <figure class="instrument evaluation">
+            <div class="figure-header"><span>Offline action comparison</span><span>Episode 0 · 408 frames</span></div>
+            <fieldset class="selectors metric-select" hidden>
+              <legend class="sr-only">Evaluation metric</legend>
+              <label><input type="radio" name="metric" value="first" checked><span>First-action MAE</span></label>
+              <label><input type="radio" name="metric" value="chunk"><span>Chunk MAE</span></label>
+              <label><input type="radio" name="metric" value="direction"><span>Direction agreement</span></label>
+              <label><input type="radio" name="metric" value="time"><span>Inference time</span></label>
+            </fieldset>
+            <div class="chart">
+              <p class="chart-label" aria-live="polite">First-action MAE · lower is better</p>
+              <div class="chart-row" data-model="a0"><span>A0</span><div class="bar-track"><div class="bar" style="--bar-width:88.32%"></div></div><output>8.832</output></div>
+              <div class="chart-row featured" data-model="prefix"><span>A1.5</span><div class="bar-track"><div class="bar" style="--bar-width:78.47%"></div></div><output>7.847</output></div>
+              <div class="chart-row" data-model="a2"><span>A2</span><div class="bar-track"><div class="bar" style="--bar-width:83.55%"></div></div><output>8.355</output></div>
+              <div class="chart-axis" aria-hidden="true"><span>0</span><span>5</span><span>10</span></div>
+            </div>
+            <figcaption>Preliminary single-episode evaluation. Physical rollout success and generalization remain open questions.</figcaption>
+          </figure>
+          <details class="disclosure">
+            <summary>View the full results table and joint traces</summary>
+            <div class="table-scroll" tabindex="0" role="region" aria-label="Full offline results">
+              <table id="results">
+                <caption class="sr-only">Offline predictions on episode 0</caption>
+                <thead><tr><th scope="col">Model</th><th scope="col">First MAE</th><th scope="col">Chunk MAE</th><th scope="col">Direction</th><th scope="col">Mean inference</th></tr></thead>
+                <tbody>
+                  <tr data-model="a0"><th scope="row">A0</th><td data-metric="first">8.832</td><td data-metric="chunk">9.094</td><td data-metric="direction">55.22%</td><td data-metric="time">0.191 s</td></tr>
+                  <tr data-model="prefix"><th scope="row">A1.5</th><td data-metric="first">7.847</td><td data-metric="chunk">8.420</td><td data-metric="direction">56.52%</td><td data-metric="time">0.203 s</td></tr>
+                  <tr data-model="a2"><th scope="row">A2</th><td data-metric="first">8.355</td><td data-metric="chunk">8.915</td><td data-metric="direction">55.18%</td><td data-metric="time">0.198 s</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <figure class="traces"><img loading="lazy" src="assets/joint-traces.jpg" width="1400" height="1680" alt="A1.5 predicted and demonstrated first actions for each joint over the evaluated episode"><figcaption>A1.5 joint-wise prediction traces</figcaption></figure>
+          </details>
+          <a class="text-link" href="https://github.com/jhyeong687/VTLA/blob/main/docs/tactile_pi05/OFFLINE_EVAL_HANDOFF.md">Evaluation protocol on GitHub</a>
+        </section>
+      </div>
+    </div>
+  </main>
+  <footer class="footer page-width">
+    <a class="wordmark" href="#top">VTLA</a>
+    <p>Vision–Tactile–Language–Action research</p>
+    <a class="text-link" href="https://github.com/jhyeong687/VTLA">GitHub</a>
+  </footer>
+</body>
+</html>
