@@ -284,15 +284,28 @@ h2 { font-family: Georgia, serif; font-weight: 400; font-size: clamp(2.15rem, 4v
 .demo > .figure-header { border-color: #5a444d; color: var(--demo-muted); }
 .demo > .figure-header span:first-child { color: var(--demo-text); }
 .demo > figcaption { color: var(--demo-muted); }
-.demo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; margin-top: .85rem; }
-.feed-label { color: var(--demo-muted); margin-bottom: .4rem; }
+.demo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: .65rem; row-gap: .4rem; margin-top: .85rem; }
+.feed-label { color: var(--demo-muted); }
 .demo-grid video {
+  display: block;
+  grid-column: 1 / -1;
   width: 100%;
-  aspect-ratio: 16/9;
+  height: auto;
+  aspect-ratio: 1292 / 360;
   object-fit: contain;
   background: #141014;
   border-radius: .32rem;
 }
+.demo-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+  margin-top: .85rem;
+}
+.demo-gallery .demo { margin: 0; }
+.demo-gallery .feed-label { font-size: .68rem; }
+.demo-gallery .transport { gap: .45rem; }
+.demo-gallery .transport-button { min-width: 4.4rem; font-size: .78rem; }
 .transport {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -538,6 +551,9 @@ th { color: var(--ink); }
   .contents a { border: 0; padding: .35rem .12rem; }
   .contents a[aria-current] { text-decoration: underline; text-underline-offset: .25em; }
 }
+@media (max-width: 740px) {
+  .demo-gallery { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 660px) {
   :root { --header-height: 3.75rem; }
   .hero { grid-template-columns: minmax(0, 1fr); padding-top: 1.75rem; gap: 1.15rem; }
@@ -559,7 +575,7 @@ th { color: var(--ink); }
   .mast-links { gap: .65rem; font-size: .82rem; }
   .wordmark { font-size: .99rem; }
   .repo-link { padding: .33rem .52rem; }
-  .demo-grid { grid-template-columns: minmax(0, 1fr); gap: .55rem; }
+  .demo-grid .feed-label { font-size: .64rem; }
   .chart-row, .chart-axis { gap: .35rem; }
   .chart-row { grid-template-columns: 2rem minmax(0, 1fr) 4.5rem; }
   .chart-axis { margin-left: 2.35rem; margin-right: 4.85rem; }

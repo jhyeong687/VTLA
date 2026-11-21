@@ -291,64 +291,53 @@ showMetric(metricSelect.querySelector(":checked").value);
 metricSelect.hidden = false;
 
 function setupDemo(player) {
-  const clips = [...player.querySelectorAll("video")];
-  const [wrist, tactile] = clips;
-  if (!wrist.canPlayType("video/mp4")) return;
+  const video = player.querySelector("video");
+  if (!video.canPlayType("video/mp4")) return;
 
   const transport = player.querySelector(".transport");
   const button = transport.querySelector("button");
   const label = button.querySelector(".transport-label");
   const seek = transport.querySelector(".seek");
   const clock = transport.querySelector(".time");
-  let failed = false;
 
-  const timestamp = (seconds) => {
+  function timestamp(seconds) {
     const whole = Math.floor(seconds);
     return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-  };
+  }
 
   function updateTime() {
     const duration = Number(seek.max);
-    seek.value = Math.min(wrist.currentTime, duration);
+    seek.value = Math.min(video.currentTime, duration);
     clock.value = `${timestamp(Number(seek.value))} / ${timestamp(duration)}`;
   }
 
-  function seekBoth(time) {
-    clips.forEach((clip) => {
-      clip.currentTime = time;
-    });
+  function updateDuration() {
+    if (!Number.isFinite(video.duration)) return;
+    seek.max = video.duration;
+    seek.disabled = false;
     updateTime();
   }
 
-  function updateButton(playing) {
+  function updateButton() {
+    const playing = !video.paused && !video.ended;
     button.toggleAttribute("data-playing", playing);
     label.textContent = playing ? "Pause" : "Play";
   }
 
-  function pauseBoth() {
-    clips.forEach((clip) => clip.pause());
-    updateButton(false);
-  }
-
   function restoreNativeControls() {
-    if (failed) return;
-    failed = true;
-    pauseBoth();
     transport.hidden = true;
-    clips.forEach((clip) => { clip.controls = true; });
-    player.querySelector("figcaption").textContent = "The heatmaps display normal force across the ring and pinky sensors. Use each clip’s player to view the recordings.";
+    video.controls = true;
   }
 
   button.addEventListener("click", async () => {
-    if (!wrist.paused) {
-      pauseBoth();
+    if (!video.paused && !video.ended) {
+      video.pause();
       return;
     }
-    if (wrist.ended || wrist.currentTime >= Number(seek.max) - .06) seekBoth(0);
+    if (video.ended) video.currentTime = 0;
     button.disabled = true;
     try {
-      await Promise.all(clips.map((clip) => clip.play()));
-      updateButton(!wrist.paused);
+      await video.play();
     } catch {
       restoreNativeControls();
     } finally {
@@ -356,29 +345,19 @@ function setupDemo(player) {
     }
   });
 
-  seek.addEventListener("input", () => seekBoth(Number(seek.value)));
-  clips.forEach((clip) => {
-    clip.addEventListener("loadedmetadata", () => {
-      if (clips.every((item) => Number.isFinite(item.duration))) {
-        seek.max = Math.min(wrist.duration, tactile.duration);
-        updateTime();
-      }
-    });
-    clip.addEventListener("ended", () => {
-      if (!failed) pauseBoth();
-    });
-    clip.addEventListener("error", restoreNativeControls);
-    clip.querySelector("source").addEventListener("error", restoreNativeControls);
-    clip.controls = false;
-  });
-
-  wrist.addEventListener("timeupdate", () => {
-    if (failed) return;
+  seek.addEventListener("input", () => {
+    video.currentTime = Number(seek.value);
     updateTime();
-    if (!wrist.paused && !tactile.paused && Math.abs(wrist.currentTime - tactile.currentTime) > .22) {
-      tactile.currentTime = wrist.currentTime;
-    }
   });
+  video.addEventListener("loadedmetadata", updateDuration);
+  video.addEventListener("timeupdate", updateTime);
+  video.addEventListener("play", updateButton);
+  video.addEventListener("pause", updateButton);
+  video.addEventListener("ended", updateButton);
+  video.addEventListener("error", restoreNativeControls);
+  video.querySelector("source").addEventListener("error", restoreNativeControls);
+  video.controls = false;
   transport.hidden = false;
+  updateDuration();
 }
-setupDemo(document.querySelector("#demo-player"));
+document.querySelectorAll("#demo .demo").forEach(setupDemo);

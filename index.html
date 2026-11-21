@@ -9,8 +9,8 @@
   <meta property="og:description" content="A vision–tactile–language–action research prototype for SO-101, Paxini, and π₀.₅.">
   <meta property="og:image" content="https://jhyeong687.github.io/VTLA/assets/robot.jpg">
   <title>VTLA — Learning to grasp with touch</title>
-  <link rel="stylesheet" href="site.css">
-  <script src="site.js" defer></script>
+  <link rel="stylesheet" href="site.css?v=2">
+  <script src="site.js?v=2" defer></script>
 </head>
 <body id="top">
   <a class="skip" href="#main">Skip to content</a>
@@ -88,32 +88,95 @@
 
         <section id="demo" class="chapter">
           <h2>From camera to contact</h2>
-          <p>Pick one cup from the stack and place it on the left. The recordings show the wrist-camera perspective and force readings from the two gripper surfaces during the demonstration.</p>
+          <p>Five teleoperated recordings of picking up a cup and placing it on the left. Each pairs the wrist camera with the ring and pinky force maps at 30 frames per second. The maps share a 0–4.6 color scale. Higher readings use the top color.</p>
           <figure class="instrument demo" id="demo-player">
-            <div class="figure-header"><span>Cup pick-and-place</span><span>Recorded demonstration</span></div>
+            <div class="figure-header"><span>Recording 01</span><span>20.8 s</span></div>
             <div class="demo-grid">
-              <div>
-                <p class="feed-label">Wrist camera</p>
-                <video controls playsinline muted preload="metadata" poster="assets/wrist-poster.jpg" aria-label="Wrist-camera cup manipulation">
-                  <source src="assets/wrist.mp4" type="video/mp4">
-                  <a href="assets/wrist.mp4">Download the wrist-camera clip</a>
-                </video>
-              </div>
-              <div>
-                <p class="feed-label">Paxini force map</p>
-                <video controls playsinline muted preload="metadata" poster="assets/tactile-poster.jpg" aria-label="Tactile heatmaps for ring and pinky sensors">
-                  <source src="assets/tactile.mp4" type="video/mp4">
-                  <a href="assets/tactile.mp4">Download the tactile clip</a>
-                </video>
-              </div>
+              <p class="feed-label">Wrist camera</p>
+              <p class="feed-label">Paxini force map</p>
+              <video controls playsinline muted preload="metadata" width="1292" height="360" poster="assets/wrist-tactile-poster.jpg" aria-label="Wrist camera and synchronized ring and pinky force maps">
+                <source src="assets/wrist-tactile.mp4" type="video/mp4">
+                <a href="assets/wrist-tactile.mp4">Download the synchronized demonstration</a>
+              </video>
             </div>
             <div class="transport" hidden>
               <button class="transport-button" type="button"><span class="play-icon" aria-hidden="true"></span><span class="transport-label">Play</span></button>
-              <input class="seek" type="range" min="0" max="15" step="0.05" value="0" aria-label="Seek both clips">
-              <output class="time" aria-label="Playback time">0:00 / 0:15</output>
+              <input class="seek" type="range" min="0" max="0" step="any" value="0" disabled aria-label="Seek demonstration">
+              <output class="time" aria-label="Playback time">0:00 / 0:00</output>
             </div>
-            <figcaption>Use the shared timeline to inspect both clips. The heatmaps display normal force across the ring and pinky sensors.</figcaption>
+            <figcaption>Look for contact around 8.5 s as the gripper closes on the cup.</figcaption>
           </figure>
+
+          <div class="demo-gallery" aria-label="Additional synchronized recordings">
+              <figure class="instrument demo" id="demo-recording-02">
+                <div class="figure-header"><span>Recording 02</span><span>11.1 s</span></div>
+                <div class="demo-grid">
+                  <p class="feed-label">Wrist camera</p>
+                  <p class="feed-label">Paxini force map</p>
+                  <video controls playsinline muted preload="metadata" width="1292" height="360" poster="assets/wrist-tactile-02-poster.jpg" aria-label="Recording 02: wrist camera and synchronized force maps">
+                    <source src="assets/wrist-tactile-02.mp4" type="video/mp4">
+                    <a href="assets/wrist-tactile-02.mp4">Download recording 02</a>
+                  </video>
+                </div>
+                <div class="transport" hidden>
+                  <button class="transport-button" type="button"><span class="play-icon" aria-hidden="true"></span><span class="transport-label">Play</span></button>
+                  <input class="seek" type="range" min="0" max="0" step="any" value="0" disabled aria-label="Seek recording 02">
+                  <output class="time" aria-label="Playback time">0:00 / 0:00</output>
+                </div>
+                <figcaption>Look for contact around 4.2 s.</figcaption>
+              </figure>
+              <figure class="instrument demo" id="demo-recording-03">
+                <div class="figure-header"><span>Recording 03</span><span>14.4 s</span></div>
+                <div class="demo-grid">
+                  <p class="feed-label">Wrist camera</p>
+                  <p class="feed-label">Paxini force map</p>
+                  <video controls playsinline muted preload="metadata" width="1292" height="360" poster="assets/wrist-tactile-03-poster.jpg" aria-label="Recording 03: wrist camera and synchronized force maps">
+                    <source src="assets/wrist-tactile-03.mp4" type="video/mp4">
+                    <a href="assets/wrist-tactile-03.mp4">Download recording 03</a>
+                  </video>
+                </div>
+                <div class="transport" hidden>
+                  <button class="transport-button" type="button"><span class="play-icon" aria-hidden="true"></span><span class="transport-label">Play</span></button>
+                  <input class="seek" type="range" min="0" max="0" step="any" value="0" disabled aria-label="Seek recording 03">
+                  <output class="time" aria-label="Playback time">0:00 / 0:00</output>
+                </div>
+                <figcaption>Look for contact around 5.6 s.</figcaption>
+              </figure>
+              <figure class="instrument demo" id="demo-recording-04">
+                <div class="figure-header"><span>Recording 04</span><span>16.9 s</span></div>
+                <div class="demo-grid">
+                  <p class="feed-label">Wrist camera</p>
+                  <p class="feed-label">Paxini force map</p>
+                  <video controls playsinline muted preload="metadata" width="1292" height="360" poster="assets/wrist-tactile-04-poster.jpg" aria-label="Recording 04: wrist camera and synchronized force maps">
+                    <source src="assets/wrist-tactile-04.mp4" type="video/mp4">
+                    <a href="assets/wrist-tactile-04.mp4">Download recording 04</a>
+                  </video>
+                </div>
+                <div class="transport" hidden>
+                  <button class="transport-button" type="button"><span class="play-icon" aria-hidden="true"></span><span class="transport-label">Play</span></button>
+                  <input class="seek" type="range" min="0" max="0" step="any" value="0" disabled aria-label="Seek recording 04">
+                  <output class="time" aria-label="Playback time">0:00 / 0:00</output>
+                </div>
+                <figcaption>Look for contact around 6.0 s.</figcaption>
+              </figure>
+              <figure class="instrument demo" id="demo-recording-05">
+                <div class="figure-header"><span>Recording 05</span><span>17.9 s</span></div>
+                <div class="demo-grid">
+                  <p class="feed-label">Wrist camera</p>
+                  <p class="feed-label">Paxini force map</p>
+                  <video controls playsinline muted preload="metadata" width="1292" height="360" poster="assets/wrist-tactile-05-poster.jpg" aria-label="Recording 05: wrist camera and synchronized force maps">
+                    <source src="assets/wrist-tactile-05.mp4" type="video/mp4">
+                    <a href="assets/wrist-tactile-05.mp4">Download recording 05</a>
+                  </video>
+                </div>
+                <div class="transport" hidden>
+                  <button class="transport-button" type="button"><span class="play-icon" aria-hidden="true"></span><span class="transport-label">Play</span></button>
+                  <input class="seek" type="range" min="0" max="0" step="any" value="0" disabled aria-label="Seek recording 05">
+                  <output class="time" aria-label="Playback time">0:00 / 0:00</output>
+                </div>
+                <figcaption>Look for contact around 4.7 s.</figcaption>
+              </figure>
+          </div>
         </section>
 
         <section id="approach" class="chapter">
