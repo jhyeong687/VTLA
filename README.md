@@ -17,13 +17,46 @@
 
 <br>
 
-<img src="./media/readme/vtla/wrist_demo.gif" alt="SO-101 cup manipulation from the wrist camera" width="820">
+<img src="./media/readme/vtla/wrist_tactile_demo.gif" alt="An SO-101 wrist-camera view and Paxini force maps synchronized frame by frame" width="820">
 
-<sub>SO-101 wrist-camera view · “Pick one cup from the stacked cups and place it on the left side.”</sub>
+<sub>Recording 01 · Wrist camera on the left, ring and pinky force maps on the right · Contact near 8.5 s</sub>
 
 </div>
 
 ---
+
+## Demo
+
+위 영상과 아래 4개는 컵을 집어 왼쪽에 놓는 실제 원격 조작 기록입니다.
+각 영상의 손목 시점과 ring·pinky 힘맵을 같은 프레임으로 맞췄으며, 5개 모두 같은 0–4.6 색상 척도를 사용합니다. 상한보다 높은 값은 가장 진한 색으로 표시합니다.
+
+[**5개 시연을 재생·탐색하기**](https://jhyeong687.github.io/VTLA/#demo)
+
+<table>
+  <tr>
+    <td width="50%" align="center"><strong>Recording 02</strong><br><img src="./media/readme/vtla/wrist_tactile_demo_02.gif" alt="Recording 02, synchronized wrist camera and Paxini force maps"><br><sub>11.1 s · Contact near 4.2 s</sub></td>
+    <td width="50%" align="center"><strong>Recording 03</strong><br><img src="./media/readme/vtla/wrist_tactile_demo_03.gif" alt="Recording 03, synchronized wrist camera and Paxini force maps"><br><sub>14.4 s · Contact near 5.6 s</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><strong>Recording 04</strong><br><img src="./media/readme/vtla/wrist_tactile_demo_04.gif" alt="Recording 04, synchronized wrist camera and Paxini force maps"><br><sub>16.9 s · Contact near 6.0 s</sub></td>
+    <td width="50%" align="center"><strong>Recording 05</strong><br><img src="./media/readme/vtla/wrist_tactile_demo_05.gif" alt="Recording 05, synchronized wrist camera and Paxini force maps"><br><sub>17.9 s · Contact near 4.7 s</sub></td>
+  </tr>
+</table>
+
+### Three synchronized camera views
+
+<table>
+  <tr>
+    <th>Top</th>
+    <th>Wrist</th>
+    <th>Belly</th>
+  </tr>
+  <tr>
+    <td><img src="./media/readme/vtla/camera_top.jpg" alt="Top camera"></td>
+    <td><img src="./media/readme/vtla/camera_wrist.jpg" alt="Wrist camera"></td>
+    <td><img src="./media/readme/vtla/camera_belly.jpg" alt="Belly camera"></td>
+  </tr>
+</table>
 
 ## Overview
 
@@ -43,38 +76,6 @@
 | Cameras    | macOS AVFoundation 및 원격 WebRTC 입력               |
 | Training   | A0 / A1.5 / A2 PEFT-LoRA 실험 하네스                 |
 | Evaluation | 로봇 실행 전 offline action comparison과 진단 그래프 |
-
-## Demo
-
-<table>
-  <tr>
-    <th width="50%">Wrist camera</th>
-    <th width="50%">Paxini tactile response</th>
-  </tr>
-  <tr>
-    <td><img src="./media/readme/vtla/wrist_demo.gif" alt="Wrist-camera cup manipulation"></td>
-    <td><img src="./media/readme/vtla/tactile_demo.gif" alt="Paxini tactile taxel response"></td>
-  </tr>
-  <tr>
-    <td align="center"><code>observation.images.wrist</code></td>
-    <td align="center">ring / pinky · 154 taxels</td>
-  </tr>
-</table>
-
-### Three synchronized camera views
-
-<table>
-  <tr>
-    <th>Top</th>
-    <th>Wrist</th>
-    <th>Belly</th>
-  </tr>
-  <tr>
-    <td><img src="./media/readme/vtla/camera_top.jpg" alt="Top camera"></td>
-    <td><img src="./media/readme/vtla/camera_wrist.jpg" alt="Wrist camera"></td>
-    <td><img src="./media/readme/vtla/camera_belly.jpg" alt="Belly camera"></td>
-  </tr>
-</table>
 
 ## Tactile hardware
 
